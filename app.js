@@ -51,10 +51,13 @@ const balls = [
   { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null },
   { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
 ];
+let ballsVisible = false;
+let playModeActive = false;
+let playTimeoutId = null;
 
 const ballGravity = 0.5;
-const ballAirFriction = 0.95;
-const ballBounce = 0.8;
+const ballAirFriction = 0.99;
+const ballBounce = 0.7;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -121,22 +124,41 @@ function loadBallImages() {
 
 // --- Pet Care Functions (exposed to window) ---
 window.feedPet = function() {
+  if (playModeActive) return;
   pet.hunger = Math.max(0, pet.hunger - 15);
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
   registerBackgroundSync('sync-feed-pet');
 };
 window.playWithPet = function() {
+  if (playModeActive) return;
+  playModeActive = true;
+  ballsVisible = true;
+  setButtonsDisabled(true);
+
+  // Reset balls to initial positions and velocities
+  balls[0].x = 100; balls[0].y = 50; balls[0].vx = 2; balls[0].vy = 0;
+  balls[1].x = 300; balls[1].y = 80; balls[1].vx = -1.5; balls[1].vy = 0;
+  balls[2].x = 500; balls[2].y = 30; balls[2].vx = 1; balls[2].vy = 0;
+
   pet.happiness = Math.min(100, pet.happiness + 10);
   pet.hunger = Math.min(100, pet.hunger + 5);
   updateStats();
+
+  playTimeoutId = setTimeout(() => {
+    ballsVisible = false;
+    playModeActive = false;
+    setButtonsDisabled(false);
+  }, 10000);
 };
 window.cleanPet = function() {
+  if (playModeActive) return;
   pet.cleanliness = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 };
 window.sleepPet = function() {
+  if (playModeActive) return;
   pet.health = Math.min(100, pet.health + 10);
   pet.hunger = Math.min(100, pet.hunger + 10);
   updateStats();
@@ -148,6 +170,7 @@ window.sleepPet = function() {
   }
 };
 window.healPet = function() {
+  if (playModeActive) return;
   pet.health = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
@@ -207,8 +230,8 @@ function startJump() {
 
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
-  const baseSpeed = Math.max(Math.abs(vx), 4); // fallback if pig is stopped
-  const speed = (1.5 + Math.random()) * baseSpeed; // 1.5x to 4x
+  const baseSpeed = Math.max(Math.abs(vx), 2); // fallback if pig is stopped
+  const speed = (1.5 + Math.random()) * baseSpeed; // 1.5x to 2.5x
   const angle = Math.random() * (Math.PI / 3); // 0 to 60 deg in radians
   const dir = direction; // -1=left, 1=right
   ball.vx = dir * speed * Math.cos(angle);
@@ -242,21 +265,6 @@ function pigHitsBallFront(ball) {
   return false;
 }
 
-// --- Ball-to-pig normal collision (non-front, for completeness) ---
-function pigHitsBallAny(ball) {
-  // Pig's bounding box
-  const pigLeft = petX;
-  const pigRight = petX + PET_WIDTH;
-  const pigTop = petY;
-  const pigBottom = petY + PET_HEIGHT;
-  const bx = ball.x, by = ball.y, r = ball.radius;
-  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
-  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
-  const dx = bx - closestX;
-  const dy = by - closestY;
-  return dx * dx + dy * dy < r * r;
-}
-
 // --- Animation/Background ---
 function drawBackground() {
   ctx.fillStyle = '#90EE90';
@@ -267,6 +275,7 @@ function drawBackground() {
 
 // --- Ball Physics Update ---
 function updateBalls() {
+  if (!ballsVisible) return;
   // --- Ball-to-ball collisions (elastic, equal mass) ---
   for (let i = 0; i < balls.length; i++) {
     for (let j = i + 1; j < balls.length; j++) {
@@ -339,6 +348,7 @@ function updateBalls() {
 
 // --- Ball Drawing ---
 function drawBalls() {
+  if (!ballsVisible) return;
   for (const ball of balls) {
     if (ball.img) {
       ctx.drawImage(
@@ -382,16 +392,12 @@ function animate() {
     }
   }
 
-  // Pig-ball collision: kick only the ball(s) hit by pig's FRONT
-  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+  // Pig-ball collision: kick only the ball(s) hit by pig's FRONT (only if balls are visible)
+  if (ballsVisible && !isSleeping && !sleepSequenceActive && !pendingWake) {
     for (const ball of balls) {
       if (pigHitsBallFront(ball)) {
         kickBallFromPig(ball);
       }
-      // Optionally: for any other pig-ball collisions, you could handle differently or simply do nothing
-      // else if (pigHitsBallAny(ball)) {
-      //   // (default ball-pig collision physics, already handled by ball physics)
-      // }
     }
   }
 
