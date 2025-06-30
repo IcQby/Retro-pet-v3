@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <title>Retro Pet</title>
+</head>
+<body>
+  <div id="app">
+    <h1>🐖 Retro Pet</h1>
+    <canvas id="pet-canvas"></canvas>
+
+    <div id="controls">
+      <button onclick="feedPet()"> Feed 🥗</button>
+      <button onclick="playWithPet()"> Play 🏀</button>
+      <button onclick="cleanPet()"> Clean 🫧</button>
+      <button onclick="sleepPet()"> Sleep 🌙</button>
+      <button onclick="healPet()"> Medicine 🩹</button>
+    </div>
+
+    <div id="stats">
+      <p>💖 Happiness: <span id="happiness"></span></p>
+      <p>🍗 Hunger: <span id="hunger"></span></p>
+      <p>✨️ Cleanliness: <span id="cleanliness"></span></p>
+      <p>❤️ Health: <span id="health"></span></p>
+    </div>
+  </div>
+
+  
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(reg => console.log('Service Worker registered:', reg.scope))
+        .catch(err => console.error('Service Worker registration failed:', err));
+    }
+  </script>
+<script src="app.js"></script>
+  
+</body>
+</html>
