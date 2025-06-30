@@ -47,16 +47,10 @@ let pet = {
 
 // --- Ball Physics ---
 const balls = [
-  { x: 100, y: 50, vx: 2, vy: 0, radius: BALL_RADIUS, img: null },
-  { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null },
-  { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
+  { x: 100, y: 50, vx: 2, vy: 0, radius: BALL_RADIUS, img: null, angle: 0 },
+  { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null, angle: 0 },
+  { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null, angle: 0 }
 ];
-let ballsVisible = false;
-let playModeActive = false;
-let playTimeoutId = null;
-let fadeOutActive = false;
-let fadeStartTime = 0;
-let fadeAlpha = 1;
 
 const ballGravity = 0.5;
 const ballAirFriction = 0.99;
@@ -64,6 +58,7 @@ const ballBounce = 0.7;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
+  // Both pig and balls use the same ground level for realism
   return canvas.height - PET_HEIGHT;
 }
 
@@ -85,6 +80,7 @@ function updateStats() {
 function resizeCanvas() {
   canvas.width = canvas.clientWidth;
   canvas.height = 300;
+  // Clamp pet position
   if (typeof petX !== 'undefined' && typeof petY !== 'undefined') {
     petX = Math.min(Math.max(petX, 0), canvas.width - PET_WIDTH - 10);
     petY = canvas.height - PET_HEIGHT;
@@ -125,44 +121,22 @@ function loadBallImages() {
 
 // --- Pet Care Functions (exposed to window) ---
 window.feedPet = function() {
-  if (playModeActive || fadeOutActive) return;
   pet.hunger = Math.max(0, pet.hunger - 15);
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
   registerBackgroundSync('sync-feed-pet');
 };
 window.playWithPet = function() {
-  if (playModeActive || fadeOutActive) return;
-  playModeActive = true;
-  ballsVisible = true;
-  fadeOutActive = false;
-  fadeAlpha = 1;
-  setButtonsDisabled(true);
-
-  // Reset balls to initial positions and velocities
-  balls[0].x = 100; balls[0].y = 50; balls[0].vx = 2; balls[0].vy = 0;
-  balls[1].x = 300; balls[1].y = 80; balls[1].vx = -1.5; balls[1].vy = 0;
-  balls[2].x = 500; balls[2].y = 30; balls[2].vx = 1; balls[2].vy = 0;
-
   pet.happiness = Math.min(100, pet.happiness + 10);
   pet.hunger = Math.min(100, pet.hunger + 5);
   updateStats();
-
-  playTimeoutId = setTimeout(() => {
-    fadeOutActive = true;
-    fadeStartTime = performance.now();
-    fadeAlpha = 1;
-    // fade will be handled in animate()
-  }, 10000);
 };
 window.cleanPet = function() {
-  if (playModeActive || fadeOutActive) return;
   pet.cleanliness = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 };
 window.sleepPet = function() {
-  if (playModeActive || fadeOutActive) return;
   pet.health = Math.min(100, pet.health + 10);
   pet.hunger = Math.min(100, pet.hunger + 10);
   updateStats();
@@ -174,7 +148,6 @@ window.sleepPet = function() {
   }
 };
 window.healPet = function() {
-  if (playModeActive || fadeOutActive) return;
   pet.health = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
@@ -208,7 +181,7 @@ function runSleepSequence() {
             currentImg = imgA;
             isSleeping = false;
             pendingWake = true;
-            vx = 0;
+            vx = 0; // Ensure pig stays still during wake phase
             vy = 0;
             wakeTimeoutId = setTimeout(() => {
               pendingWake = false;
@@ -234,16 +207,44 @@ function startJump() {
 
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
-  const baseSpeed = Math.max(Math.abs(vx), 2);
-  const speed = (1.5 + Math.random()) * baseSpeed;
-  const angle = Math.random() * (Math.PI / 3);
-  const dir = direction;
+  const baseSpeed = Math.max(Math.abs(vx), 2); // fallback if pig is stopped
+  const speed = (1.5 + Math.random()) * baseSpeed; // 1.5x to 2.5x
+  const angle = Math.random() * (Math.PI / 3); // 0 to 60 deg in radians
+  const dir = direction; // -1=left, 1=right
   ball.vx = dir * speed * Math.cos(angle);
-  ball.vy = -speed * Math.sin(angle);
+  ball.vy = -speed * Math.sin(angle); // up is negative Y
 }
 
 // --- Pig-ball front collision detection ---
 function pigHitsBallFront(ball) {
+  // Pig's bounding box
+  const pigLeft = petX;
+  const pigRight = petX + PET_WIDTH;
+  const pigTop = petY;
+  const pigBottom = petY + PET_HEIGHT;
+  // Ball's center and radius
+  const bx = ball.x, by = ball.y, r = ball.radius;
+  // Find closest point on pig to ball center
+  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
+  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
+  const dx = bx - closestX;
+  const dy = by - closestY;
+  if (dx * dx + dy * dy < r * r) {
+    // Now check if hit is at the pig's "front"
+    if (direction === 1) {
+      // Right-facing pig: right edge is front
+      return bx > pigRight - r * 0.5 && bx < pigRight + r;
+    } else {
+      // Left-facing pig: left edge is front
+      return bx < pigLeft + r * 0.5 && bx > pigLeft - r;
+    }
+  }
+  return false;
+}
+
+// --- Ball-to-pig normal collision (non-front, for completeness) ---
+function pigHitsBallAny(ball) {
+  // Pig's bounding box
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
   const pigTop = petY;
@@ -253,14 +254,7 @@ function pigHitsBallFront(ball) {
   const closestY = Math.max(pigTop, Math.min(by, pigBottom));
   const dx = bx - closestX;
   const dy = by - closestY;
-  if (dx * dx + dy * dy < r * r) {
-    if (direction === 1) {
-      return bx > pigRight - r * 0.5 && bx < pigRight + r;
-    } else {
-      return bx < pigLeft + r * 0.5 && bx > pigLeft - r;
-    }
-  }
-  return false;
+  return dx * dx + dy * dy < r * r;
 }
 
 // --- Animation/Background ---
@@ -273,7 +267,7 @@ function drawBackground() {
 
 // --- Ball Physics Update ---
 function updateBalls() {
-  if (!ballsVisible && !fadeOutActive) return;
+  // --- Ball-to-ball collisions (elastic, equal mass) ---
   for (let i = 0; i < balls.length; i++) {
     for (let j = i + 1; j < balls.length; j++) {
       const b1 = balls[i];
@@ -283,6 +277,7 @@ function updateBalls() {
       const dist = Math.sqrt(dx * dx + dy * dy);
       const minDist = b1.radius + b2.radius;
       if (dist < minDist && dist > 0) {
+        // Move them apart so they're just touching
         const overlap = 0.5 * (minDist - dist + 1);
         const nx = dx / dist;
         const ny = dy / dist;
@@ -291,15 +286,17 @@ function updateBalls() {
         b2.x += nx * overlap;
         b2.y += ny * overlap;
 
+        // 2D elastic collision response (equal mass)
         const kx = b1.vx - b2.vx;
         const ky = b1.vy - b2.vy;
-        const p = 2 * (nx * kx + ny * ky) / 2;
+        const p = 2 * (nx * kx + ny * ky) / 2; // mass cancels
 
         b1.vx = b1.vx - p * nx;
         b1.vy = b1.vy - p * ny;
         b2.vx = b2.vx + p * nx;
         b2.vy = b2.vy + p * ny;
 
+        // Dampen a little for realism
         b1.vx *= ballBounce;
         b1.vy *= ballBounce;
         b2.vx *= ballBounce;
@@ -308,21 +305,31 @@ function updateBalls() {
     }
   }
 
+  // Ball motion, ground and wall bounce
   for (const ball of balls) {
+    // Gravity
     ball.vy += ballGravity;
+    // Air friction
     ball.vx *= ballAirFriction;
     ball.vy *= ballAirFriction;
+    // Move
     ball.x += ball.vx;
     ball.y += ball.vy;
 
+    // --- Ball rotation: angle proportional to vertical speed ---
+    // You can adjust the multiplier for more/less spin!
+    ball.angle += ball.vy / 25;
+
+    // --- Shared ground: balls rest on the grass line where the pig walks ---
     const pigGroundY = getGroundY();
     const ballRestY = pigGroundY + PET_HEIGHT - BALL_RADIUS;
     if (ball.y + BALL_RADIUS > ballRestY) {
       ball.y = ballRestY - BALL_RADIUS;
       ball.vy *= -ballBounce;
-      if (Math.abs(ball.vy) < 1) ball.vy = 0;
+      if (Math.abs(ball.vy) < 1) ball.vy = 0; // settle
     }
 
+    // Bounce off walls
     if (ball.x - BALL_RADIUS < 0) {
       ball.x = BALL_RADIUS;
       ball.vx *= -ballBounce;
@@ -336,16 +343,15 @@ function updateBalls() {
 
 // --- Ball Drawing ---
 function drawBalls() {
-  if (!ballsVisible && !fadeOutActive) return;
-  let alpha = fadeAlpha;
   for (const ball of balls) {
     if (ball.img) {
       ctx.save();
-      ctx.globalAlpha = alpha;
+      ctx.translate(ball.x, ball.y);
+      ctx.rotate(ball.angle || 0);
       ctx.drawImage(
         ball.img,
-        ball.x - BALL_RADIUS,
-        ball.y - BALL_RADIUS,
+        -BALL_RADIUS,
+        -BALL_RADIUS,
         BALL_DISPLAY_SIZE,
         BALL_DISPLAY_SIZE
       );
@@ -354,7 +360,7 @@ function drawBalls() {
   }
 }
 
-function animate(now) {
+function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
 
@@ -362,25 +368,14 @@ function animate(now) {
   updateBalls();
   drawBalls();
 
-  // Fade out logic
-  if (fadeOutActive) {
-    let elapsed = now - fadeStartTime;
-    fadeAlpha = Math.max(0, 1 - elapsed / 5000);
-    if (fadeAlpha <= 0) {
-      ballsVisible = false;
-      fadeOutActive = false;
-      playModeActive = false;
-      setButtonsDisabled(false);
-      fadeAlpha = 1;
-    }
-  }
-
+  // Only move pig if not sleeping, not in sleep sequence, not pendingWake
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     vy += gravity;
     petX += vx;
     petY += vy;
   }
 
+  // Wall bounce for pig
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     if (petX <= 0) {
       petX = 0;
@@ -395,15 +390,20 @@ function animate(now) {
     }
   }
 
-  // Pig-ball collision: kick only the ball(s) hit by pig's FRONT (during visible or fade)
-  if ((ballsVisible || fadeOutActive) && !isSleeping && !sleepSequenceActive && !pendingWake) {
+  // Pig-ball collision: kick only the ball(s) hit by pig's FRONT
+  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     for (const ball of balls) {
       if (pigHitsBallFront(ball)) {
         kickBallFromPig(ball);
       }
+      // Optionally: for any other pig-ball collisions, you could handle differently or simply do nothing
+      // else if (pigHitsBallAny(ball)) {
+      //   // (default ball-pig collision physics, already handled by ball physics)
+      // }
     }
   }
 
+  // Landing logic
   let groundY = getGroundY();
   if (petY >= groundY) {
     petY = groundY;
@@ -473,7 +473,7 @@ window.addEventListener('DOMContentLoaded', () => {
       currentImg = petImgLeft;
       resumeDirection = direction;
       resumeImg = currentImg;
-      requestAnimationFrame(animate);
+      animate();
     })
     .catch((err) => {
       console.error("One or more images failed to load.", err);
