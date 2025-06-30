@@ -285,12 +285,24 @@ function startJump() {
 
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
-  const baseSpeed = Math.max(Math.abs(vx), 2);
-  const speed = (1.5 + Math.random()) * baseSpeed;
-  const angle = Math.random() * (Math.PI / 3);
+  // Make it fly much faster than before
+  const baseSpeed = Math.max(Math.abs(vx), 4); // double previous min speed
+  const speed = (3 + Math.random() * 1.5) * baseSpeed; // higher base (was 1.5~2.5x)
   const dir = direction;
-  ball.vx = dir * speed * Math.cos(angle);
-  ball.vy = -speed * Math.sin(angle);
+
+  // 2x as much chance to go up at 45-60°
+  // 0-1: 2/3 chance for 45-60°, 1/3 for 0-45°
+  if (Math.random() < 2/3) {
+    // Angle between 45° and 60°
+    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12); // 45° to 60°
+    ball.vx = dir * speed * Math.cos(angle);
+    ball.vy = -speed * Math.sin(angle);
+  } else {
+    // Angle between 0° and 45°
+    const angle = Math.random() * (Math.PI / 4); // 0° to 45°
+    ball.vx = dir * speed * Math.cos(angle);
+    ball.vy = -speed * Math.sin(angle);
+  }
 }
 
 // --- Pig-ball front collision detection ---
