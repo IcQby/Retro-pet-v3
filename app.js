@@ -277,9 +277,13 @@ function runSleepSequence() {
   }, 1000);
 }
 
+// --- Make pig jump 2/3 slower left and right ---
 function startJump() {
-  const speed = 6, angle = Math.PI * 65 / 180;
-  vx = direction * speed * Math.cos(angle);
+  // Reduce horizontal jump speed to 1/3 of previous value (so 2/3 slower)
+  const speed = 6;
+  const angle = Math.PI * 65 / 180;
+  const horizontalFactor = 1 / 3; // 2/3 slower
+  vx = direction * speed * Math.cos(angle) * horizontalFactor;
   vy = -speed * Math.sin(angle);
 }
 
@@ -306,7 +310,6 @@ function kickBallFromPig(ball) {
 }
 
 // --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
-// Returns true if the pig and ball overlap, and also resolves overlap by pushing pig out
 function resolvePigBallOverlap() {
   if (!showBall || !ball) return false;
   // Pig rectangle:
@@ -345,6 +348,34 @@ function resolvePigBallOverlap() {
     return true;
   }
   return false;
+}
+
+// --- Ball bounces off the top of the pig ---
+function ballBounceOnPigTop() {
+  if (!showBall || !ball) return;
+  // Define pig top surface as a segment from (petX, petY) to (petX+PET_WIDTH, petY)
+  const pigTopY = petY;
+  const pigLeft = petX;
+  const pigRight = petX + PET_WIDTH;
+  // Ball's bottom is at ball.y + radius
+  const prevY = ball.y - ball.vy; // previous frame's y
+  const ballBottom = ball.y + BALL_RADIUS;
+  // Only react if the ball is falling onto the pig from above, and overlaps horizontally with pig
+  if (
+    ball.vy > 0 && // falling
+    prevY + BALL_RADIUS <= pigTopY - 1 && // was above pig top last frame
+    ballBottom >= pigTopY && // now touches or passes pig top
+    ball.x + BALL_RADIUS > pigLeft + 5 && // allow a small margin
+    ball.x - BALL_RADIUS < pigRight - 5
+  ) {
+    // Place the ball exactly on top of the pig
+    ball.y = pigTopY - BALL_RADIUS;
+    ball.vy *= -ballBounce; // bounce up
+    // Add a little pig velocity effect to the ball
+    ball.vx += vx * 0.5;
+    // Slightly reduce horizontal velocity for realism
+    ball.vx *= 0.98;
+  }
 }
 
 // --- Pig-ball front collision detection ---
@@ -399,6 +430,8 @@ function updateBall() {
   // Air friction
   ball.vx *= ballAirFriction;
   ball.vy *= ballAirFriction;
+  // Ball bounces off the top of the pig
+  ballBounceOnPigTop();
   // Move
   ball.x += ball.vx;
   ball.y += ball.vy;
