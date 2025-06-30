@@ -45,21 +45,19 @@ let pet = {
   health: 50,
 };
 
-// --- Ball Physics ---
-const balls = [
-  { x: 100, y: 50, vx: 2, vy: 0, radius: BALL_RADIUS, img: null, angle: 0 },
-  { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null, angle: 0 },
-  { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null, angle: 0 }
-];
+// --- Ball State (now just one) ---
+let ball = null; // will be {x, y, vx, vy, radius, img, angle}
+let ballImgObjects = []; // for preloaded images
+
 const ballGravity = 0.5;
 const ballAirFriction = 0.99;
 const ballBounce = 0.7;
 
 // --- Ball Visibility Logic ---
-let showBalls = false;
-let ballsAlpha = 1;
-let showBallsTimeout = null;
-let fadeBallsTimeout = null;
+let showBall = false;
+let ballAlpha = 1;
+let showBallTimeout = null;
+let fadeBallTimeout = null;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -104,7 +102,7 @@ function loadImages(images) {
   );
 }
 
-// --- Ball Image Preload ---
+// --- Ball Image Preload (array of Image objects) ---
 function loadBallImages() {
   return Promise.all(
     ballImages.map(
@@ -113,7 +111,7 @@ function loadBallImages() {
           const img = new Image();
           img.src = src;
           img.onload = () => {
-            balls[i].img = img;
+            ballImgObjects[i] = img;
             resolve();
           };
           img.onerror = reject;
@@ -133,7 +131,7 @@ window.playWithPet = function() {
   pet.happiness = Math.min(100, pet.happiness + 10);
   pet.hunger = Math.min(100, pet.hunger + 5);
   updateStats();
-  showBallsForDuration();
+  showBallForDuration();
 };
 window.cleanPet = function() {
   pet.cleanliness = 100;
@@ -157,30 +155,53 @@ window.healPet = function() {
   updateStats();
 };
 
-// --- Ball Show/Hide Logic ---
-function showBallsForDuration() {
+// --- Ball Show/Hide Logic (now for a single random ball) ---
+function showBallForDuration() {
   // Always reset timers and state
-  clearTimeout(showBallsTimeout);
-  clearTimeout(fadeBallsTimeout);
-  showBalls = true;
-  ballsAlpha = 1;
+  clearTimeout(showBallTimeout);
+  clearTimeout(fadeBallTimeout);
+  showBall = true;
+  ballAlpha = 1;
 
-  // Reset ball positions and velocities if desired
-  balls[0].x = 100; balls[0].y = 50; balls[0].vx = 2; balls[0].vy = 0; balls[0].angle = 0;
-  balls[1].x = 300; balls[1].y = 80; balls[1].vx = -1.5; balls[1].vy = 0; balls[1].angle = 0;
-  balls[2].x = 500; balls[2].y = 30; balls[2].vx = 1; balls[2].vy = 0; balls[2].angle = 0;
+  // Pick a random image and a random position, random velocity
+  const imgIndex = Math.floor(Math.random() * ballImgObjects.length);
+  const img = ballImgObjects[imgIndex];
+
+  // Choose a random x within canvas, not too close to edge
+  const margin = BALL_RADIUS + 5;
+  const minX = margin;
+  const maxX = canvas.width - margin;
+  const minY = margin;
+  // Height should be above the grass but not too high (e.g. upper 2/3 of sky)
+  const maxY = getGroundY() + PET_HEIGHT - BALL_RADIUS - 40;
+  const randX = minX + Math.random() * (maxX - minX);
+  const randY = minY + Math.random() * (maxY - minY);
+
+  // Random initial velocity
+  const randVx = (Math.random() - 0.5) * 5;
+  const randVy = (Math.random() - 0.2) * 3;
+
+  ball = {
+    x: randX,
+    y: randY,
+    vx: randVx,
+    vy: randVy,
+    radius: BALL_RADIUS,
+    img: img,
+    angle: 0
+  };
 
   // After 10s, start fading over 5s
-  showBallsTimeout = setTimeout(() => {
+  showBallTimeout = setTimeout(() => {
     let fadeStart = Date.now();
     function fadeStep() {
       let elapsed = Date.now() - fadeStart;
-      ballsAlpha = Math.max(0, 1 - (elapsed / 5000));
-      if (ballsAlpha > 0) {
-        fadeBallsTimeout = setTimeout(fadeStep, 16);
+      ballAlpha = Math.max(0, 1 - (elapsed / 5000));
+      if (ballAlpha > 0) {
+        fadeBallTimeout = setTimeout(fadeStep, 16);
       } else {
-        showBalls = false;
-        ballsAlpha = 1;
+        showBall = false;
+        ballAlpha = 1;
       }
     }
     fadeStep();
@@ -290,90 +311,59 @@ function drawBackground() {
   ctx.fillRect(0, 0, canvas.width, getGroundY());
 }
 
-// --- Ball Physics Update ---
-function updateBalls() {
-  if (!showBalls) return;
-  for (let i = 0; i < balls.length; i++) {
-    for (let j = i + 1; j < balls.length; j++) {
-      const b1 = balls[i];
-      const b2 = balls[j];
-      const dx = b2.x - b1.x;
-      const dy = b2.y - b1.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const minDist = b1.radius + b2.radius;
-      if (dist < minDist && dist > 0) {
-        const overlap = 0.5 * (minDist - dist + 1);
-        const nx = dx / dist;
-        const ny = dy / dist;
-        b1.x -= nx * overlap;
-        b1.y -= ny * overlap;
-        b2.x += nx * overlap;
-        b2.y += ny * overlap;
+// --- Ball Physics Update (now just one) ---
+function updateBall() {
+  if (!showBall || !ball) return;
 
-        const kx = b1.vx - b2.vx;
-        const ky = b1.vy - b2.vy;
-        const p = 2 * (nx * kx + ny * ky) / 2;
+  // Gravity
+  ball.vy += ballGravity;
+  // Air friction
+  ball.vx *= ballAirFriction;
+  ball.vy *= ballAirFriction;
+  // Move
+  ball.x += ball.vx;
+  ball.y += ball.vy;
 
-        b1.vx = b1.vx - p * nx;
-        b1.vy = b1.vy - p * ny;
-        b2.vx = b2.vx + p * nx;
-        b2.vy = b2.vy + p * ny;
+  // Ball rotation proportional to horizontal speed
+  ball.angle += ball.vx / BALL_RADIUS;
 
-        b1.vx *= ballBounce;
-        b1.vy *= ballBounce;
-        b2.vx *= ballBounce;
-        b2.vy *= ballBounce;
-      }
-    }
+  // Shared ground: balls rest on the grass line where the pig walks
+  const pigGroundY = getGroundY();
+  const ballRestY = pigGroundY + PET_HEIGHT - BALL_RADIUS;
+  if (ball.y + BALL_RADIUS > ballRestY) {
+    ball.y = ballRestY - BALL_RADIUS;
+    ball.vy *= -ballBounce;
+    if (Math.abs(ball.vy) < 1) ball.vy = 0; // settle
   }
 
-  for (const ball of balls) {
-    ball.vy += ballGravity;
-    ball.vx *= ballAirFriction;
-    ball.vy *= ballAirFriction;
-    ball.x += ball.vx;
-    ball.y += ball.vy;
-
-    // Ball rotation proportional to horizontal speed
-    ball.angle += ball.vx / BALL_RADIUS;
-
-    const pigGroundY = getGroundY();
-    const ballRestY = pigGroundY + PET_HEIGHT - BALL_RADIUS;
-    if (ball.y + BALL_RADIUS > ballRestY) {
-      ball.y = ballRestY - BALL_RADIUS;
-      ball.vy *= -ballBounce;
-      if (Math.abs(ball.vy) < 1) ball.vy = 0;
-    }
-    if (ball.x - BALL_RADIUS < 0) {
-      ball.x = BALL_RADIUS;
-      ball.vx *= -ballBounce;
-    }
-    if (ball.x + BALL_RADIUS > canvas.width) {
-      ball.x = canvas.width - BALL_RADIUS;
-      ball.vx *= -ballBounce;
-    }
+  // Bounce off walls
+  if (ball.x - BALL_RADIUS < 0) {
+    ball.x = BALL_RADIUS;
+    ball.vx *= -ballBounce;
+  }
+  if (ball.x + BALL_RADIUS > canvas.width) {
+    ball.x = canvas.width - BALL_RADIUS;
+    ball.vx *= -ballBounce;
   }
 }
 
-// --- Ball Drawing ---
-function drawBalls() {
-  if (!showBalls) return;
+// --- Ball Drawing (now just one) ---
+function drawBall() {
+  if (!showBall || !ball) return;
   ctx.save();
-  ctx.globalAlpha = ballsAlpha;
-  for (const ball of balls) {
-    if (ball.img) {
-      ctx.save();
-      ctx.translate(ball.x, ball.y);
-      ctx.rotate(ball.angle || 0);
-      ctx.drawImage(
-        ball.img,
-        -BALL_RADIUS,
-        -BALL_RADIUS,
-        BALL_DISPLAY_SIZE,
-        BALL_DISPLAY_SIZE
-      );
-      ctx.restore();
-    }
+  ctx.globalAlpha = ballAlpha;
+  if (ball.img) {
+    ctx.save();
+    ctx.translate(ball.x, ball.y);
+    ctx.rotate(ball.angle || 0);
+    ctx.drawImage(
+      ball.img,
+      -BALL_RADIUS,
+      -BALL_RADIUS,
+      BALL_DISPLAY_SIZE,
+      BALL_DISPLAY_SIZE
+    );
+    ctx.restore();
   }
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -384,8 +374,8 @@ function animate() {
   drawBackground();
 
   // Ball physics and drawing
-  updateBalls();
-  drawBalls();
+  updateBall();
+  drawBall();
 
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     vy += gravity;
@@ -407,11 +397,9 @@ function animate() {
     }
   }
 
-  if (!isSleeping && !sleepSequenceActive && !pendingWake && showBalls) {
-    for (const ball of balls) {
-      if (pigHitsBallFront(ball)) {
-        kickBallFromPig(ball);
-      }
+  if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
+    if (pigHitsBallFront(ball)) {
+      kickBallFromPig(ball);
     }
   }
 
