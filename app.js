@@ -305,6 +305,48 @@ function kickBallFromPig(ball) {
   }
 }
 
+// --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
+// Returns true if the pig and ball overlap, and also resolves overlap by pushing pig out
+function resolvePigBallOverlap() {
+  if (!showBall || !ball) return false;
+  // Pig rectangle:
+  const pigLeft = petX;
+  const pigRight = petX + PET_WIDTH;
+  const pigTop = petY;
+  const pigBottom = petY + PET_HEIGHT;
+  // Ball center and radius:
+  const bx = ball.x, by = ball.y, r = ball.radius;
+
+  // Find closest point on the pig rect to the ball center
+  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
+  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
+  const dx = bx - closestX;
+  const dy = by - closestY;
+  const distSq = dx * dx + dy * dy;
+
+  if (distSq < r * r) {
+    // Overlap: push the pig out along the minimal axis
+    const dist = Math.sqrt(distSq) || 0.01;
+    const overlap = r - dist;
+    // Direction to push pig: from ball to pig
+    const pushX = dx / dist;
+    const pushY = dy / dist;
+    // Move pig minimally on x/y axis to resolve overlap
+    // Only move in x direction (since pig walks horizontally)
+    if (Math.abs(pushX) > Math.abs(pushY)) {
+      petX += (pushX * overlap);
+      // Clamp to canvas
+      petX = Math.max(0, Math.min(petX, canvas.width - PET_WIDTH));
+    } else {
+      petY += (pushY * overlap);
+      // Clamp to ground
+      petY = Math.max(0, Math.min(petY, getGroundY()));
+    }
+    return true;
+  }
+  return false;
+}
+
 // --- Pig-ball front collision detection ---
 function pigHitsBallFront(ball) {
   const pigLeft = petX;
@@ -449,6 +491,9 @@ function animate() {
 
   // Pig chase logic
   updatePigChase();
+
+  // Prevent pig from overlapping with the ball
+  resolvePigBallOverlap();
 
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     vy += gravity;
