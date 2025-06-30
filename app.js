@@ -277,12 +277,12 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- Make pig jump 2/3 slower left and right ---
+// --- Make pig jump even slower and a little wider ---
 function startJump() {
-  // Reduce horizontal jump speed to 1/3 of previous value (so 2/3 slower)
-  const speed = 6;
-  const angle = Math.PI * 65 / 180;
-  const horizontalFactor = 1 / 3; // 2/3 slower
+  // Much slower horizontal (about 1/5th original), and shallower angle for wider jump
+  const speed = 4.5; // slightly less than before
+  const angle = Math.PI * 55 / 180; // 55 degrees, wider
+  const horizontalFactor = 0.22; // ~1/5th of old value
   vx = direction * speed * Math.cos(angle) * horizontalFactor;
   vy = -speed * Math.sin(angle);
 }
