@@ -308,7 +308,6 @@ function startAutoJump() {
 }
 
 // --- Pig-ball overlap avoidance ---
-// When overlapping, pig keeps jumping AWAY from the ball until not overlapping anymore, then resumes chase
 function isPigOverlappingBall() {
   if (!showBall || !ball) return false;
   const pigLeft = petX;
@@ -316,7 +315,6 @@ function isPigOverlappingBall() {
   const pigTop = petY;
   const pigBottom = petY + PET_HEIGHT;
   const bx = ball.x, by = ball.y;
-  // Only avoid if ball center is within pig rectangle (not just touching)
   return bx > pigLeft && bx < pigRight && by > pigTop && by < pigBottom;
 }
 
@@ -444,29 +442,22 @@ function updatePigChase() {
 
   // --- Overlap protection ---
   if (pigAvoidingBall) {
-    // If still overlapping, keep jumping in the last set avoidance direction
-    // (pigAvoidBallDirection is -1 for left, 1 for right)
     if (petY === getGroundY()) {
-      // at ground, start next jump in avoid direction
       direction = pigAvoidBallDirection;
       startAutoJump();
     }
-    // If not overlapping anymore, quit avoidance and resume chase
     if (!isPigOverlappingBall()) {
       pigAvoidingBall = false;
     }
     return;
   } else if (isPigOverlappingBall()) {
-    // Start avoidance!
     pigAvoidingBall = true;
-    // Pick direction that moves pig farther from ball center
     const pigCenter = petX + PET_WIDTH / 2;
     if (ball.x > pigCenter) {
       pigAvoidBallDirection = -1;
     } else {
       pigAvoidBallDirection = 1;
     }
-    // Set direction and jump
     direction = pigAvoidBallDirection;
     if (petY === getGroundY()) {
       startAutoJump();
@@ -506,17 +497,13 @@ function animate() {
 
   // --- Ball gone pause logic ---
   if (justPausedAfterBall) {
-    // Stop all movement for 2 seconds
     vx = 0;
     vy = 0;
-    // (petY gets reset below)
+    petY = getGroundY();
     if (Date.now() >= ballGonePauseUntil) {
       justPausedAfterBall = false;
-      // After pause, start normal auto-jump again
       startAutoJump();
     }
-    // draw pig at ground
-    petY = getGroundY();
     ctx.drawImage(currentImg, petX, petY, PET_WIDTH, PET_HEIGHT);
     requestAnimationFrame(animate);
     return;
@@ -530,25 +517,24 @@ function animate() {
       petY += vy;
 
       const totalWidth = canvas.width - PET_WIDTH;
-
-      // Clamp to valid range
-      if (petX < 0) petX = 0;
-      if (petX > totalWidth) petX = totalWidth;
-
       let groundY = getGroundY();
+
       if (petY >= groundY) {
         petY = groundY;
         vy = 0;
 
-        // Snap to edge if pig reached it (avoid drifting)
+        // --- Immediate bounce at walls, no slowdown ---
         if (petX <= 0) {
           petX = 0;
           direction = 1;
+          startAutoJump();
         } else if (petX >= totalWidth) {
           petX = totalWidth;
           direction = -1;
+          startAutoJump();
+        } else {
+          startAutoJump();
         }
-        startAutoJump();
       }
     }
   } else {
