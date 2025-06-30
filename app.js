@@ -55,6 +55,7 @@ const balls = [
 const ballGravity = 0.5;
 const ballAirFriction = 0.99;
 const ballBounce = 0.7;
+const pigBounce = 0.7;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -213,8 +214,8 @@ function drawBackground() {
   ctx.fillRect(0, 0, canvas.width, getGroundY());
 }
 
-// --- Ball Physics Update ---
-function updateBalls() {
+// --- Ball and Pig Physics Update ---
+function updateBallsAndPigCollision() {
   // --- Ball-to-ball collisions (elastic, equal mass) ---
   for (let i = 0; i < balls.length; i++) {
     for (let j = i + 1; j < balls.length; j++) {
@@ -253,16 +254,55 @@ function updateBalls() {
     }
   }
 
-  // Ball motion, ground and wall bounce
+  // --- Ball-Pig interaction (AABB-circle collision with bounce) ---
+  // Pig's bounding box for collision
+  const pigLeft = petX;
+  const pigRight = petX + PET_WIDTH;
+  const pigTop = petY;
+  const pigBottom = petY + PET_HEIGHT;
+
   for (const ball of balls) {
     // Gravity
     ball.vy += ballGravity;
     // Air friction
     ball.vx *= ballAirFriction;
     ball.vy *= ballAirFriction;
+
     // Move
     ball.x += ball.vx;
     ball.y += ball.vy;
+
+    // --- Ball-pig collision ---
+    // Find closest point on pig's rectangle to the ball center
+    const closestX = Math.max(pigLeft, Math.min(ball.x, pigRight));
+    const closestY = Math.max(pigTop, Math.min(ball.y, pigBottom));
+    const dx = ball.x - closestX;
+    const dy = ball.y - closestY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < ball.radius) {
+      // Push ball out of pig
+      const overlap = ball.radius - distance + 1;
+      const nx = dx / (distance || 1); // prevent NaN
+      const ny = dy / (distance || 1);
+
+      // Move ball out
+      ball.x += nx * overlap;
+      ball.y += ny * overlap;
+
+      // Reflect ball velocity
+      const dot = ball.vx * nx + ball.vy * ny;
+      ball.vx = ball.vx - 2 * dot * nx;
+      ball.vy = ball.vy - 2 * dot * ny;
+      ball.vx *= ballBounce;
+      ball.vy *= ballBounce;
+
+      // Pig gets a nudge (if not sleeping)
+      if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+        vx += -nx * 0.7 * Math.abs(ball.vx) * 0.8;
+        vy += -ny * 0.7 * Math.abs(ball.vy) * 0.8;
+      }
+    }
 
     // --- Shared ground: balls rest on the grass line where the pig walks ---
     const pigGroundY = getGroundY();
@@ -273,7 +313,7 @@ function updateBalls() {
       if (Math.abs(ball.vy) < 1) ball.vy = 0; // settle
     }
 
-    // Bounce off walls
+    // --- Walls ---
     if (ball.x - BALL_RADIUS < 0) {
       ball.x = BALL_RADIUS;
       ball.vx *= -ballBounce;
@@ -285,7 +325,6 @@ function updateBalls() {
   }
 }
 
-// --- Ball Drawing ---
 function drawBalls() {
   for (const ball of balls) {
     if (ball.img) {
@@ -304,8 +343,8 @@ function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
 
-  // Ball physics and drawing
-  updateBalls();
+  // Ball physics and drawing, and pig-ball interaction
+  updateBallsAndPigCollision();
   drawBalls();
 
   // Only move pet if not sleeping, not in sleep sequence, not pendingWake
