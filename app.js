@@ -277,11 +277,11 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- Gentle, wide, slow jump for pig ---
+// --- v21 Jump Logic (restore this version for v21 "wider" jumps) ---
 function startJump() {
-  // Gentle, wide jump: slow speed, shallow angle
-  const speed = 2.5; // lower for gentle movement
-  const angle = Math.PI * 35 / 180; // 35° for a wide, low arc
+  // "Wider" but normal speed jump for v21
+  const speed = 6;
+  const angle = Math.PI * 45 / 180; // 45° for a wide arc
   vx = direction * speed * Math.cos(angle);
   vy = -speed * Math.sin(angle);
 }
@@ -289,19 +289,15 @@ function startJump() {
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
   // Make it fly much faster than before
-  const baseSpeed = Math.max(Math.abs(vx), 4); // double previous min speed
-  const speed = (3 + Math.random() * 1.5) * baseSpeed; // higher base (was 1.5~2.5x)
+  const baseSpeed = Math.max(Math.abs(vx), 4);
+  const speed = (3 + Math.random() * 1.5) * baseSpeed;
   const dir = direction;
 
-  // 2x as much chance to go up at 45-60°
-  // 0-1: 2/3 chance for 45-60°, 1/3 for 0-45°
   if (Math.random() < 2/3) {
-    // Angle between 45° and 60°
     const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12); // 45° to 60°
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
   } else {
-    // Angle between 0° and 45°
     const angle = Math.random() * (Math.PI / 4); // 0° to 45°
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
@@ -311,15 +307,11 @@ function kickBallFromPig(ball) {
 // --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
 function resolvePigBallOverlap() {
   if (!showBall || !ball) return false;
-  // Pig rectangle:
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
   const pigTop = petY;
   const pigBottom = petY + PET_HEIGHT;
-  // Ball center and radius:
   const bx = ball.x, by = ball.y, r = ball.radius;
-
-  // Find closest point on the pig rect to the ball center
   const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
   const closestY = Math.max(pigTop, Math.min(by, pigBottom));
   const dx = bx - closestX;
@@ -327,21 +319,15 @@ function resolvePigBallOverlap() {
   const distSq = dx * dx + dy * dy;
 
   if (distSq < r * r) {
-    // Overlap: push the pig out along the minimal axis
     const dist = Math.sqrt(distSq) || 0.01;
     const overlap = r - dist;
-    // Direction to push pig: from ball to pig
     const pushX = dx / dist;
     const pushY = dy / dist;
-    // Move pig minimally on x/y axis to resolve overlap
-    // Only move in x direction (since pig walks horizontally)
     if (Math.abs(pushX) > Math.abs(pushY)) {
       petX += (pushX * overlap);
-      // Clamp to canvas
       petX = Math.max(0, Math.min(petX, canvas.width - PET_WIDTH));
     } else {
       petY += (pushY * overlap);
-      // Clamp to ground
       petY = Math.max(0, Math.min(petY, getGroundY()));
     }
     return true;
@@ -352,27 +338,21 @@ function resolvePigBallOverlap() {
 // --- Ball bounces off the top of the pig ---
 function ballBounceOnPigTop() {
   if (!showBall || !ball) return;
-  // Define pig top surface as a segment from (petX, petY) to (petX+PET_WIDTH, petY)
   const pigTopY = petY;
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
-  // Ball's bottom is at ball.y + radius
-  const prevY = ball.y - ball.vy; // previous frame's y
+  const prevY = ball.y - ball.vy;
   const ballBottom = ball.y + BALL_RADIUS;
-  // Only react if the ball is falling onto the pig from above, and overlaps horizontally with pig
   if (
-    ball.vy > 0 && // falling
-    prevY + BALL_RADIUS <= pigTopY - 1 && // was above pig top last frame
-    ballBottom >= pigTopY && // now touches or passes pig top
-    ball.x + BALL_RADIUS > pigLeft + 5 && // allow a small margin
+    ball.vy > 0 &&
+    prevY + BALL_RADIUS <= pigTopY - 1 &&
+    ballBottom >= pigTopY &&
+    ball.x + BALL_RADIUS > pigLeft + 5 &&
     ball.x - BALL_RADIUS < pigRight - 5
   ) {
-    // Place the ball exactly on top of the pig
     ball.y = pigTopY - BALL_RADIUS;
-    ball.vy *= -ballBounce; // bounce up
-    // Add a little pig velocity effect to the ball
+    ball.vy *= -ballBounce;
     ball.vx += vx * 0.5;
-    // Slightly reduce horizontal velocity for realism
     ball.vx *= 0.98;
   }
 }
@@ -424,30 +404,23 @@ function drawBackground() {
 function updateBall() {
   if (!showBall || !ball) return;
 
-  // Gravity
   ball.vy += ballGravity;
-  // Air friction
   ball.vx *= ballAirFriction;
   ball.vy *= ballAirFriction;
-  // Ball bounces off the top of the pig
   ballBounceOnPigTop();
-  // Move
   ball.x += ball.vx;
   ball.y += ball.vy;
 
-  // Ball rotation proportional to horizontal speed
   ball.angle += ball.vx / BALL_RADIUS;
 
-  // Shared ground: balls rest on the grass line where the pig walks
   const pigGroundY = getGroundY();
   const ballRestY = pigGroundY + PET_HEIGHT - BALL_RADIUS;
   if (ball.y + BALL_RADIUS > ballRestY) {
     ball.y = ballRestY - BALL_RADIUS;
     ball.vy *= -ballBounce;
-    if (Math.abs(ball.vy) < 1) ball.vy = 0; // settle
+    if (Math.abs(ball.vy) < 1) ball.vy = 0;
   }
 
-  // Bounce off walls
   if (ball.x - BALL_RADIUS < 0) {
     ball.x = BALL_RADIUS;
     ball.vx *= -ballBounce;
@@ -482,20 +455,14 @@ function drawBall() {
 
 // --- Pig Chasing Ball Logic ---
 function updatePigChase() {
-  // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
   if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
 
-  // Consider the center of the pig horizontally
   const pigCenterX = petX + PET_WIDTH / 2;
-  // Ball's x
   const ballX = ball.x;
 
-  // Pig chases ball if not touching it
-  // (give a small deadzone so pig doesn't jitter at the ball)
-  const chaseSpeed = 3; // speed of pig when chasing
+  const chaseSpeed = 3 * 0.4; // 60% slower movement (40% of original speed)
   const deadzone = BALL_RADIUS + 10;
   if (Math.abs(ballX - pigCenterX) > deadzone) {
-    // Go towards the ball
     if (ballX > pigCenterX) {
       direction = 1;
       vx = chaseSpeed;
@@ -506,8 +473,7 @@ function updatePigChase() {
       currentImg = petImgLeft;
     }
   } else {
-    vx = 0; // reached ball
-    // Keep facing the ball
+    vx = 0;
     if (direction === 1) currentImg = petImgRight;
     else currentImg = petImgLeft;
   }
@@ -517,14 +483,11 @@ function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
 
-  // Ball physics and drawing
   updateBall();
   drawBall();
 
-  // Pig chase logic
   updatePigChase();
 
-  // Prevent pig from overlapping with the ball
   resolvePigBallOverlap();
 
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
