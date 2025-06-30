@@ -270,12 +270,13 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- Auto jump logic: always 5 even jumps to cross the screen left/right or right/left
+// --- Auto jump logic for continuous bouncing ---
+// Pig always takes 5 even jumps to cross the screen left-right or right-left
 function startAutoJump() {
   const totalWidth = canvas.width - PET_WIDTH;
   const jumpCount = 5;
   const jumpDistance = totalWidth / jumpCount;
-  const jumpDurationSeconds = 0.8;
+  const jumpDurationSeconds = 0.8; // tweak for a smooth arc
   const fps = 60;
   const frames = jumpDurationSeconds * fps;
 
@@ -293,6 +294,7 @@ function startAutoJump() {
   const dx = targetX - petX;
 
   vx = dx / frames;
+
   const jumpHeight = 32;
   vy = -Math.sqrt(2 * gravity * jumpHeight);
 
@@ -300,23 +302,18 @@ function startAutoJump() {
 }
 
 // --- Pig-ball overlap avoidance ---
+// Only trigger avoidance if the pig's rectangle fully contains the ball's center
 function resolvePigBallOverlap() {
   if (!showBall || !ball) return false;
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
   const pigTop = petY;
   const pigBottom = petY + PET_HEIGHT;
-  const bx = ball.x, by = ball.y, r = ball.radius;
-  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
-  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
-  const dx = bx - closestX;
-  const dy = by - closestY;
-  const distSq = dx * dx + dy * dy;
+  const bx = ball.x, by = ball.y;
 
-  if (distSq < r * r) {
-    // Set avoidance
+  // Only avoid if ball center is within pig rectangle (not just touching)
+  if (bx > pigLeft && bx < pigRight && by > pigTop && by < pigBottom) {
     pigAvoidingBall = true;
-    // Target is 1.5 pig widths away from ball center, in current direction
     if (direction === 1) {
       pigAvoidBallTargetX = bx + 1.5 * PET_WIDTH;
     } else {
@@ -494,6 +491,16 @@ function animate() {
 
   // If not chasing a ball, the pig bounces continuously
   if (!showBall || !ball) {
+    // If pig was avoiding ball but ball is gone, keep going until target passed
+    if (pigAvoidingBall) {
+      if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
+          (direction === -1 && petX + PET_WIDTH / 2 > pigAvoidBallTargetX)) {
+        vx = 3 * 0.4 * direction;
+        currentImg = direction === 1 ? petImgRight : petImgLeft;
+      } else {
+        pigAvoidingBall = false; // done avoiding, resume normal
+      }
+    }
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
       vy += gravity;
       petX += vx;
@@ -524,6 +531,18 @@ function animate() {
   } else {
     updatePigChase();
     resolvePigBallOverlap();
+
+    // If ball disappears while pig is avoiding, keep going until target is passed
+    if (!showBall && pigAvoidingBall) {
+      if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
+          (direction === -1 && petX + PET_WIDTH / 2 > pigAvoidBallTargetX)) {
+        vx = 3 * 0.4 * direction;
+        currentImg = direction === 1 ? petImgRight : petImgLeft;
+      } else {
+        pigAvoidingBall = false;
+      }
+    }
+
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
       vy += gravity;
       petX += vx;
