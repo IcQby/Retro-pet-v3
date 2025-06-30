@@ -1,116 +1,43 @@
-// Multi-ball physics for Retro Pet canvas
-const canvas = document.getElementById('pet-canvas');
-canvas.width = 600;
-canvas.height = 300;
-const ctx = canvas.getContext('2d');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <title>Retro Pet</title>
+</head>
+<body>
+  <div id="app">
+    <h1>🐖 Retro Pet</h1>
+    <canvas id="pet-canvas"></canvas>
 
-const BALL_DISPLAY_SIZE = 50;
-const BALL_RADIUS = BALL_DISPLAY_SIZE / 2;
-const groundy = 270; // ground level for balls
+    <div id="controls">
+      <button onclick="feedPet()"> Feed 🥗</button>
+      <button onclick="playWithPet()"> Play 🏀</button>
+      <button onclick="cleanPet()"> Clean 🫧</button>
+      <button onclick="sleepPet()"> Sleep 🌙</button>
+      <button onclick="healPet()"> Medicine 🩹</button>
+    </div>
 
-const ballImages = [
-  'icon/ball1.png',
-  'icon/ball2.png',
-  'icon/ball3.png'
-];
+    <div id="stats">
+      <p>💖 Happiness: <span id="happiness"></span></p>
+      <p>🍗 Hunger: <span id="hunger"></span></p>
+      <p>✨️ Cleanliness: <span id="cleanliness"></span></p>
+      <p>❤️ Health: <span id="health"></span></p>
+    </div>
+  </div>
 
-const balls = [
-  { x: 100, y: 50, vx: 2, vy: 0, radius: BALL_RADIUS, img: null },
-  { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null },
-  { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
-];
-
-// Physics constants
-const gravity = 0.5;
-const airFriction = 0.99;
-const bounce = 0.7;
-
-// Load all ball images
-let loadedImages = 0;
-ballImages.forEach((src, i) => {
-  const img = new Image();
-  img.src = src;
-  img.onload = () => {
-    balls[i].img = img;
-    loadedImages++;
-    if (loadedImages === balls.length) startBalls();
-  };
-});
-
-function drawGround() {
-  ctx.beginPath();
-  ctx.moveTo(0, groundy + BALL_RADIUS);
-  ctx.lineTo(canvas.width, groundy + BALL_RADIUS);
-  ctx.strokeStyle = '#aaa';
-  ctx.stroke();
-}
-
-// Draw all balls
-function drawBalls() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawGround();
-  for (const ball of balls) {
-    if (ball.img) {
-      ctx.drawImage(
-        ball.img,
-        ball.x - BALL_RADIUS,
-        ball.y - BALL_RADIUS,
-        BALL_DISPLAY_SIZE,
-        BALL_DISPLAY_SIZE
-      );
+  
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(reg => console.log('Service Worker registered:', reg.scope))
+        .catch(err => console.error('Service Worker registration failed:', err));
     }
-  }
-}
-
-// Update physics for all balls
-function updateBalls() {
-  for (const ball of balls) {
-    // Gravity
-    ball.vy += gravity;
-    // Air friction
-    ball.vx *= airFriction;
-    ball.vy *= airFriction;
-    // Move
-    ball.x += ball.vx;
-    ball.y += ball.vy;
-    // Ground collision
-    if (ball.y + BALL_RADIUS > groundy + BALL_RADIUS) {
-      ball.y = groundy;
-      ball.vy *= -bounce;
-      if (Math.abs(ball.vy) < 1) ball.vy = 0;
-    }
-    // Wall collisions
-    if (ball.x - BALL_RADIUS < 0) {
-      ball.x = BALL_RADIUS;
-      ball.vx *= -bounce;
-    }
-    if (ball.x + BALL_RADIUS > canvas.width) {
-      ball.x = canvas.width - BALL_RADIUS;
-      ball.vx *= -bounce;
-    }
-  }
-}
-
-// Animation loop
-function ballsLoop() {
-  updateBalls();
-  drawBalls();
-  requestAnimationFrame(ballsLoop);
-}
-
-function startBalls() {
-  ballsLoop();
-}
-
-// --- Stub pet functions for controls (implement as needed) ---
-function feedPet() { /* ... */ }
-function playWithPet() { /* ... */ }
-function cleanPet() { /* ... */ }
-function sleepPet() { /* ... */ }
-function healPet() { /* ... */ }
-
-// --- Example: Update stats (replace with your logic!) ---
-document.getElementById('happiness').textContent = "100";
-document.getElementById('hunger').textContent = "0";
-document.getElementById('cleanliness').textContent = "100";
-document.getElementById('health').textContent = "100";
+  </script>
+<script src="app.js"></script>
+  
+</body>
+</html>
