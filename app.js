@@ -46,8 +46,8 @@ let pet = {
 };
 
 // --- Ball State (only one at a time) ---
-let ball = null; // will be {x, y, vx, vy, radius, img, angle}
-let ballImgObjects = []; // preloaded images
+let ball = null;
+let ballImgObjects = [];
 
 const ballGravity = 0.5;
 const ballAirFriction = 0.99;
@@ -60,7 +60,7 @@ let showBallTimeout = null;
 let fadeBallTimeout = null;
 
 // --- Action Lock ---
-let actionInProgress = false; // Used to lock/unlock buttons during effect
+let actionInProgress = false;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -105,55 +105,52 @@ function loadImages(images) {
   );
 }
 
-// --- Ball Image Preload (array of Image objects) ---
 function loadBallImages() {
   return Promise.all(
-    ballImages.map(
-      (src, i) =>
-        new Promise((resolve, reject) => {
-          const img = new Image();
-          img.src = src;
-          img.onload = () => {
-            ballImgObjects[i] = img;
-            resolve();
-          };
-          img.onerror = reject;
-        })
+    ballImages.map((src, i) =>
+      new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+          ballImgObjects[i] = img;
+          resolve();
+        };
+        img.onerror = reject;
+      })
     )
   );
 }
 
 // --- Pet Care Functions (exposed to window) ---
 function effectGuard(fn) {
-  // Helper to wrap all pet actions so only one runs at a time
-  return function(...args) {
+  return function (...args) {
     if (actionInProgress) return;
     fn.apply(this, args);
   };
 }
 
-window.feedPet = effectGuard(function() {
-  lockActionsForDuration(1000); // Lock for 1s
+window.feedPet = effectGuard(function () {
+  lockActionsForDuration(1000);
   pet.hunger = Math.max(0, pet.hunger - 15);
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
   registerBackgroundSync('sync-feed-pet');
 });
-window.playWithPet = effectGuard(function() {
-  lockActionsForDuration(15000); // 10s visible + 5s fade for ball
+window.playWithPet = effectGuard(function () {
+  lockActionsForDuration(15000);
   pet.happiness = Math.min(100, pet.happiness + 10);
   pet.hunger = Math.min(100, pet.hunger + 5);
   updateStats();
   showBallForDuration();
 });
-window.cleanPet = effectGuard(function() {
-  lockActionsForDuration(2000); // Lock for 2s
+window.cleanPet = effectGuard(function () {
+  lockActionsForDuration(2000);
   pet.cleanliness = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 });
-window.sleepPet = effectGuard(function() {
-  lockActionsForDuration(9000); // Approx 9s for sleep sequence
+window.sleepPet = effectGuard(function () {
+  lockActionsForDuration(9000);
   pet.health = Math.min(100, pet.health + 10);
   pet.hunger = Math.min(100, pet.hunger + 10);
   updateStats();
@@ -164,14 +161,13 @@ window.sleepPet = effectGuard(function() {
     pendingSleep = true;
   }
 });
-window.healPet = effectGuard(function() {
-  lockActionsForDuration(1000); // Lock for 1s
+window.healPet = effectGuard(function () {
+  lockActionsForDuration(1000);
   pet.health = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 });
 
-// --- Action Lock Helper ---
 function lockActionsForDuration(ms) {
   if (actionInProgress) return;
   actionInProgress = true;
@@ -182,29 +178,22 @@ function lockActionsForDuration(ms) {
   }, ms);
 }
 
-// --- Ball Show/Hide Logic (for a single random ball, top half only) ---
+// --- Ball Show/Hide Logic ---
 function showBallForDuration() {
   clearTimeout(showBallTimeout);
   clearTimeout(fadeBallTimeout);
   showBall = true;
   ballAlpha = 1;
 
-  // Pick a random image and a random position (top half only), random velocity
   const imgIndex = Math.floor(Math.random() * ballImgObjects.length);
   const img = ballImgObjects[imgIndex];
-
-  // x: not too close to edge
   const margin = BALL_RADIUS + 5;
   const minX = margin;
   const maxX = canvas.width - margin;
-
-  // y: only in top half
   const minY = margin;
   const maxY = Math.floor(canvas.height / 2) - margin;
   const randX = minX + Math.random() * (maxX - minX);
   const randY = minY + Math.random() * (maxY - minY);
-
-  // Random initial velocity
   const randVx = (Math.random() - 0.5) * 5;
   const randVy = (Math.random() - 0.2) * 3;
 
@@ -215,15 +204,14 @@ function showBallForDuration() {
     vy: randVy,
     radius: BALL_RADIUS,
     img: img,
-    angle: 0
+    angle: 0,
   };
 
-  // After 10s, start fading over 5s
   showBallTimeout = setTimeout(() => {
     let fadeStart = Date.now();
     function fadeStep() {
       let elapsed = Date.now() - fadeStart;
-      ballAlpha = Math.max(0, 1 - (elapsed / 5000));
+      ballAlpha = Math.max(0, 1 - elapsed / 5000);
       if (ballAlpha > 0) {
         fadeBallTimeout = setTimeout(fadeStep, 16);
       } else {
@@ -242,8 +230,8 @@ function runSleepSequence() {
   sleepRequested = false;
 
   let imgA = resumeImg;
-  let imgB = (resumeImg === petImgRight) ? petImgLeft : petImgRight;
-  let sleepImg = (resumeImg === petImgRight) ? petImgSleepR : petImgSleep;
+  let imgB = resumeImg === petImgRight ? petImgLeft : petImgRight;
+  let sleepImg = resumeImg === petImgRight ? petImgSleepR : petImgSleep;
 
   currentImg = imgA;
 
@@ -261,14 +249,15 @@ function runSleepSequence() {
             currentImg = imgA;
             isSleeping = false;
             pendingWake = true;
-            vx = 0; vy = 0;
+            vx = 0;
+            vy = 0;
             wakeTimeoutId = setTimeout(() => {
               pendingWake = false;
               sleepSequenceStep = 0;
               sleepSequenceActive = false;
               direction = resumeDirection;
-              currentImg = (direction === 1) ? petImgRight : petImgLeft;
-              startJump();
+              currentImg = direction === 1 ? petImgRight : petImgLeft;
+              startBounceJump();
             }, 2000);
           }, 5000);
         }, 500);
@@ -277,33 +266,48 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- v21 Jump Logic (restore this version for v21 "wider" jumps) ---
-function startJump(jumpSpeedFactor = 1) {
-  // "Wider" but normal speed jump for v21, now supports speed factor
-  const speed = 6 * jumpSpeedFactor;
-  const angle = Math.PI * 45 / 180; // 45° for a wide arc
-  vx = direction * speed * Math.cos(angle);
-  vy = -speed * Math.sin(angle);
+// --- Side-to-side bounce logic ---
+// Each jump crosses ~1/4 of the canvas in 1 second (so 4-5 bounces in 4-5s)
+function startBounceJump() {
+  // Determine target edge and direction
+  let targetX, dist, jumpDuration;
+  // Each jump: 1/4 canvas per bounce, 1s per bounce
+  jumpDuration = 1.0; // seconds
+  let bouncesPerTrip = 4; // want 4-5 bounces per trip
+  let segment = (canvas.width - PET_WIDTH) / bouncesPerTrip;
+  if (direction === 1) {
+    // going right
+    targetX = Math.min(petX + segment, canvas.width - PET_WIDTH);
+  } else {
+    // going left
+    targetX = Math.max(petX - segment, 0);
+  }
+  dist = targetX - petX;
+
+  vx = dist / (jumpDuration * 60); // 60fps
+  // Set a gentle jump height (makes arc look good for 1s jump)
+  const jumpHeight = 38; // pixels, adjust for gentle arc
+  vy = -Math.sqrt(2 * gravity * jumpHeight);
+
+  currentImg = direction === 1 ? petImgRight : petImgLeft;
 }
 
-// --- Kick a ball with an arc when the pig hits its front! ---
+// --- Ball physics, collision, etc (unchanged from v21) ---
 function kickBallFromPig(ball) {
   const baseSpeed = Math.max(Math.abs(vx), 4);
   const speed = (3 + Math.random() * 1.5) * baseSpeed;
   const dir = direction;
-
-  if (Math.random() < 2/3) {
-    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12); // 45° to 60°
+  if (Math.random() < 2 / 3) {
+    const angle = Math.PI / 4 + Math.random() * (Math.PI / 12);
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
   } else {
-    const angle = Math.random() * (Math.PI / 4); // 0° to 45°
+    const angle = Math.random() * (Math.PI / 4);
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
   }
 }
 
-// --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
 function resolvePigBallOverlap() {
   if (!showBall || !ball) return false;
   const pigLeft = petX;
@@ -323,10 +327,10 @@ function resolvePigBallOverlap() {
     const pushX = dx / dist;
     const pushY = dy / dist;
     if (Math.abs(pushX) > Math.abs(pushY)) {
-      petX += (pushX * overlap);
+      petX += pushX * overlap;
       petX = Math.max(0, Math.min(petX, canvas.width - PET_WIDTH));
     } else {
-      petY += (pushY * overlap);
+      petY += pushY * overlap;
       petY = Math.max(0, Math.min(petY, getGroundY()));
     }
     return true;
@@ -334,7 +338,6 @@ function resolvePigBallOverlap() {
   return false;
 }
 
-// --- Ball bounces off the top of the pig ---
 function ballBounceOnPigTop() {
   if (!showBall || !ball) return;
   const pigTopY = petY;
@@ -356,13 +359,14 @@ function ballBounceOnPigTop() {
   }
 }
 
-// --- Pig-ball front collision detection ---
 function pigHitsBallFront(ball) {
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
   const pigTop = petY;
   const pigBottom = petY + PET_HEIGHT;
-  const bx = ball.x, by = ball.y, r = ball.radius;
+  const bx = ball.x,
+    by = ball.y,
+    r = ball.radius;
   const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
   const closestY = Math.max(pigTop, Math.min(by, pigBottom));
   const dx = bx - closestX;
@@ -377,20 +381,6 @@ function pigHitsBallFront(ball) {
   return false;
 }
 
-// --- Ball-to-pig normal collision (non-front, for completeness) ---
-function pigHitsBallAny(ball) {
-  const pigLeft = petX;
-  const pigRight = petX + PET_WIDTH;
-  const pigTop = petY;
-  const pigBottom = petY + PET_HEIGHT;
-  const bx = ball.x, by = ball.y, r = ball.radius;
-  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
-  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
-  const dx = bx - closestX;
-  const dy = by - closestY;
-  return dx * dx + dy * dy < r * r;
-}
-
 // --- Animation/Background ---
 function drawBackground() {
   ctx.fillStyle = '#90EE90';
@@ -399,7 +389,6 @@ function drawBackground() {
   ctx.fillRect(0, 0, canvas.width, getGroundY());
 }
 
-// --- Ball Physics Update (only one) ---
 function updateBall() {
   if (!showBall || !ball) return;
 
@@ -430,7 +419,6 @@ function updateBall() {
   }
 }
 
-// --- Ball Drawing (only one) ---
 function drawBall() {
   if (!showBall || !ball) return;
   ctx.save();
@@ -478,6 +466,7 @@ function updatePigChase() {
   }
 }
 
+// --- Animate loop ---
 function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
@@ -485,47 +474,79 @@ function animate() {
   updateBall();
   drawBall();
 
-  updatePigChase();
+  // If not chasing a ball, the pig bounces continuously
+  if (!showBall || !ball) {
+    if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+      vy += gravity;
+      petX += vx;
+      petY += vy;
 
-  resolvePigBallOverlap();
+      // Start new jump if at the end of segment or at an edge
+      let segment = (canvas.width - PET_WIDTH) / 4;
+      if (
+        (direction === 1 && petX >= Math.min(petX + segment, canvas.width - PET_WIDTH) - 2) ||
+        (direction === -1 && petX <= Math.max(petX - segment, 0) + 2)
+      ) {
+        // Reverse direction if at edge
+        if (petX <= 0) {
+          petX = 0;
+          direction = 1;
+        } else if (petX + PET_WIDTH >= canvas.width) {
+          petX = canvas.width - PET_WIDTH;
+          direction = -1;
+        } else {
+          direction *= -1;
+        }
+        startBounceJump();
+      }
 
-  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
-    vy += gravity;
-    petX += vx;
-    petY += vy;
-  }
-
-  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
-    if (petX <= 0) {
-      petX = 0;
-      direction = 1;
-      vx = Math.abs(vx);
-      currentImg = petImgRight;
-    } else if (petX + PET_WIDTH >= canvas.width) {
-      petX = canvas.width - PET_WIDTH;
-      direction = -1;
-      vx = -Math.abs(vx);
-      currentImg = petImgLeft;
+      // On ground, start another jump toward the current direction
+      let groundY = getGroundY();
+      if (petY >= groundY) {
+        petY = groundY;
+        vy = 0;
+        startBounceJump();
+      }
     }
-  }
-
-  if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
-    if (pigHitsBallFront(ball)) {
-      kickBallFromPig(ball);
+  } else {
+    // Ball play logic
+    updatePigChase();
+    resolvePigBallOverlap();
+    if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+      vy += gravity;
+      petX += vx;
+      petY += vy;
     }
-  }
-
-  let groundY = getGroundY();
-  if (petY >= groundY) {
-    petY = groundY;
-    if (pendingSleep) {
-      vx = 0;
-      vy = 0;
-      pendingSleep = false;
-      runSleepSequence();
-    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
-      // If normal jump (not play), use 50% speed
-      startJump(0.5);
+    if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+      if (petX <= 0) {
+        petX = 0;
+        direction = 1;
+        vx = Math.abs(vx);
+        currentImg = petImgRight;
+      } else if (petX + PET_WIDTH >= canvas.width) {
+        petX = canvas.width - PET_WIDTH;
+        direction = -1;
+        vx = -Math.abs(vx);
+        currentImg = petImgLeft;
+      }
+    }
+    if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
+      if (pigHitsBallFront(ball)) {
+        kickBallFromPig(ball);
+      }
+    }
+    let groundY = getGroundY();
+    if (petY >= groundY) {
+      petY = groundY;
+      if (pendingSleep) {
+        vx = 0;
+        vy = 0;
+        pendingSleep = false;
+        runSleepSequence();
+      } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
+        // On ground during play, use a normal jump (not auto-jump)
+        startBounceJump();
+      }
     }
   }
 
@@ -585,6 +606,7 @@ window.addEventListener('DOMContentLoaded', () => {
       currentImg = petImgLeft;
       resumeDirection = direction;
       resumeImg = currentImg;
+      startBounceJump();
       animate();
     })
     .catch((err) => {
