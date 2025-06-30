@@ -277,13 +277,12 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- Make pig jump even slower and a little wider ---
+// --- Gentle, wide, slow jump for pig ---
 function startJump() {
-  // Much slower horizontal (about 1/5th original), and shallower angle for wider jump
-  const speed = 4.5; // slightly less than before
-  const angle = Math.PI * 55 / 180; // 55 degrees, wider
-  const horizontalFactor = 0.22; // ~1/5th of old value
-  vx = direction * speed * Math.cos(angle) * horizontalFactor;
+  // Gentle, wide jump: slow speed, shallow angle
+  const speed = 2.5; // lower for gentle movement
+  const angle = Math.PI * 35 / 180; // 35° for a wide, low arc
+  vx = direction * speed * Math.cos(angle);
   vy = -speed * Math.sin(angle);
 }
 
