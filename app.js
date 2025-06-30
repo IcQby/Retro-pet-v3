@@ -211,17 +211,11 @@ function drawBackground() {
   ctx.fillRect(0, getGroundY(), canvas.width, canvas.height - getGroundY());
   ctx.fillStyle = '#ADD8E6';
   ctx.fillRect(0, 0, canvas.width, getGroundY());
-  // Draw ground line for balls (optional for debug)
-  // ctx.beginPath();
-  // ctx.moveTo(0, getGroundY() + BALL_RADIUS);
-  // ctx.lineTo(canvas.width, getGroundY() + BALL_RADIUS);
-  // ctx.strokeStyle = '#aaa';
-  // ctx.stroke();
 }
 
 // --- Ball Physics Update ---
 function updateBalls() {
-  // Ball-to-ball collisions (simple elastic, equal mass)
+  // --- Ball-to-ball collisions (elastic, equal mass) ---
   for (let i = 0; i < balls.length; i++) {
     for (let j = i + 1; j < balls.length; j++) {
       const b1 = balls[i];
@@ -231,8 +225,8 @@ function updateBalls() {
       const dist = Math.sqrt(dx * dx + dy * dy);
       const minDist = b1.radius + b2.radius;
       if (dist < minDist) {
-        // Minimal translation distance to separate balls
-        const overlap = (minDist - dist) / 2;
+        // Move them apart so they're just touching
+        const overlap = 0.5 * (minDist - dist + 1);
         const nx = dx / dist;
         const ny = dy / dist;
         b1.x -= nx * overlap;
@@ -240,23 +234,21 @@ function updateBalls() {
         b2.x += nx * overlap;
         b2.y += ny * overlap;
 
-        // Calculate velocities along the normal
-        const dvx = b2.vx - b1.vx;
-        const dvy = b2.vy - b1.vy;
-        const vn = dvx * nx + dvy * ny;
-        if (vn < 0) { // Only resolve if balls moving toward each other
-          // Exchange velocities (perfectly elastic, equal mass)
-          const impulse = 2 * vn / 2; // mass cancels out
-          b1.vx += impulse * nx;
-          b1.vy += impulse * ny;
-          b2.vx -= impulse * nx;
-          b2.vy -= impulse * ny;
-          // Slightly dampen after collision
-          b1.vx *= ballBounce;
-          b1.vy *= ballBounce;
-          b2.vx *= ballBounce;
-          b2.vy *= ballBounce;
-        }
+        // 2D elastic collision response (equal mass)
+        const kx = b1.vx - b2.vx;
+        const ky = b1.vy - b2.vy;
+        const p = 2 * (nx * kx + ny * ky) / 2; // mass cancels
+
+        b1.vx = b1.vx - p * nx;
+        b1.vy = b1.vy - p * ny;
+        b2.vx = b2.vx + p * nx;
+        b2.vy = b2.vy + p * ny;
+
+        // Dampen a little for realism
+        b1.vx *= ballBounce;
+        b1.vy *= ballBounce;
+        b2.vx *= ballBounce;
+        b2.vy *= ballBounce;
       }
     }
   }
