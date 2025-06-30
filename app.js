@@ -52,7 +52,7 @@ const balls = [
   { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
 ];
 
-const ballGravity = 0.8;
+const ballGravity = 0.5;
 const ballAirFriction = 0.95;
 const ballBounce = 0.8;
 
