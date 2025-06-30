@@ -207,8 +207,8 @@ function startJump() {
 
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
-  const baseSpeed = Math.max(Math.abs(vx), 2); // fallback if pig is stopped
-  const speed = (1.5 + Math.random()) * baseSpeed; // 1.5x to 2.5x
+  const baseSpeed = Math.max(Math.abs(vx), 4); // fallback if pig is stopped
+  const speed = (1.5 + Math.random()) * baseSpeed; // 1.5x to 4x
   const angle = Math.random() * (Math.PI / 3); // 0 to 60 deg in radians
   const dir = direction; // -1=left, 1=right
   ball.vx = dir * speed * Math.cos(angle);
