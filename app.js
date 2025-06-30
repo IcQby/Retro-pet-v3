@@ -224,7 +224,7 @@ function updateBalls() {
       const dy = b2.y - b1.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const minDist = b1.radius + b2.radius;
-      if (dist < minDist) {
+      if (dist < minDist && dist > 0) {
         // Move them apart so they're just touching
         const overlap = 0.5 * (minDist - dist + 1);
         const nx = dx / dist;
@@ -264,10 +264,11 @@ function updateBalls() {
     ball.x += ball.vx;
     ball.y += ball.vy;
 
-    // Bounce off ground (shared with pig)
-    const groundY = getGroundY();
-    if (ball.y + BALL_RADIUS > groundY + BALL_RADIUS) {
-      ball.y = groundY;
+    // --- Shared ground: balls rest on the grass line where the pig walks ---
+    const pigGroundY = getGroundY();
+    const ballRestY = pigGroundY + PET_HEIGHT - BALL_RADIUS;
+    if (ball.y + BALL_RADIUS > ballRestY) {
+      ball.y = ballRestY - BALL_RADIUS;
       ball.vy *= -ballBounce;
       if (Math.abs(ball.vy) < 1) ball.vy = 0; // settle
     }
