@@ -52,9 +52,9 @@ const balls = [
   { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
 ];
 
-const ballGravity = 0.5;
-const ballAirFriction = 0.99;
-const ballBounce = 0.7;
+const ballGravity = 0.3;
+const ballAirFriction = 0.60;
+const ballBounce = 0.8;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
