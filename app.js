@@ -221,7 +221,7 @@ function showBallForDuration() {
       } else {
         showBall = false;
         ballAlpha = 1;
-        ball = null; // Ensure play sequence ends
+        ball = null; // End play sequence
         pigAvoidingBall = false;
       }
     }
@@ -263,7 +263,7 @@ function runSleepSequence() {
               sleepSequenceActive = false;
               direction = resumeDirection;
               currentImg = direction === 1 ? petImgRight : petImgLeft;
-              startAutoJump();
+              // Resume idle movement
             }, 2000);
           }, 5000);
         }, 500);
@@ -272,34 +272,32 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- Auto jump logic for continuous bouncing ---
-// Pig always takes 5 even jumps to cross the screen left-right or right-left
-function startAutoJump() {
-  const totalWidth = canvas.width - PET_WIDTH;
-  const jumpCount = 5;
-  const jumpDistance = totalWidth / jumpCount;
-  const jumpDurationSeconds = 0.8; // tweak for a smooth arc
-  const fps = 60;
-  const frames = jumpDurationSeconds * fps;
+// --- v18-like idle movement logic, for movement between actions ---
+function updateIdleMovement() {
+  // Only move if not sleeping, not in play/ball mode, not in button action, not in avoidance
+  if (isSleeping || sleepSequenceActive || pendingWake || actionInProgress || showBall || pigAvoidingBall) return;
 
-  if (petX < 0) petX = 0;
-  if (petX > totalWidth) petX = totalWidth;
+  // Pig walks at a constant speed, reverses at edges
+  const speed = 2;
+  petX += direction * speed;
 
-  let targetX;
-  if (direction === 1) {
-    targetX = petX + jumpDistance;
-    if (targetX > totalWidth) targetX = totalWidth;
-  } else {
-    targetX = petX - jumpDistance;
-    if (targetX < 0) targetX = 0;
+  // Bounce on edges
+  const minX = 0;
+  const maxX = canvas.width - PET_WIDTH;
+  if (petX < minX) {
+    petX = minX;
+    direction = 1;
+    currentImg = petImgRight;
+  } else if (petX > maxX) {
+    petX = maxX;
+    direction = -1;
+    currentImg = petImgLeft;
   }
-  const dx = targetX - petX;
 
-  vx = dx / frames;
+  // Always on the ground
+  petY = getGroundY();
 
-  const jumpHeight = 32;
-  vy = -Math.sqrt(2 * gravity * jumpHeight);
-
+  // Animation frame
   currentImg = direction === 1 ? petImgRight : petImgLeft;
 }
 
@@ -326,7 +324,7 @@ function resolvePigBallOverlap() {
   return false;
 }
 
-// --- Ball physics, collision, etc (unchanged from v21) ---
+// --- Ball physics, collision, etc ---
 function kickBallFromPig(ball) {
   const baseSpeed = Math.max(Math.abs(vx), 4);
   const speed = (3 + Math.random() * 1.5) * baseSpeed;
@@ -490,76 +488,17 @@ function animate() {
   updateBall();
   drawBall();
 
-  // If not chasing a ball, the pig bounces continuously
-  if (!showBall) {
-    // If pig was avoiding ball but ball is gone, keep going until target passed
-    if (pigAvoidingBall) {
-      if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
-          (direction === -1 && petX + PET_WIDTH / 2 > pigAvoidBallTargetX)) {
-        vx = 3 * 0.4 * direction;
-        currentImg = direction === 1 ? petImgRight : petImgLeft;
-      } else {
-        pigAvoidingBall = false;
-      }
-    }
-    if (!isSleeping && !sleepSequenceActive && !pendingWake) {
-      vy += gravity;
-      petX += vx;
-      petY += vy;
+  // --- v18-style idle movement between actions ---
+  updateIdleMovement();
 
-      const totalWidth = canvas.width - PET_WIDTH;
-      let bounced = false;
-      let groundY = getGroundY();
-
-      if (petY >= groundY) {
-        petY = groundY;
-        vy = 0;
-        // Bounce at the edges, with no slowdown!
-        if (petX < 0) {
-          petX = 0;
-          direction = 1;
-          bounced = true;
-        }
-        if (petX > totalWidth) {
-          petX = totalWidth;
-          direction = -1;
-          bounced = true;
-        }
-        startAutoJump();
-      }
-    }
-  } else {
+  // Play/ball sequence and avoidance logic:
+  if (showBall && ball) {
     updatePigChase();
     resolvePigBallOverlap();
-
-    if (!showBall && pigAvoidingBall) {
-      if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
-          (direction === -1 && petX + PET_WIDTH / 2 > pigAvoidBallTargetX)) {
-        vx = 3 * 0.4 * direction;
-        currentImg = direction === 1 ? petImgRight : petImgLeft;
-      } else {
-        pigAvoidingBall = false;
-      }
-    }
-
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
       vy += gravity;
       petX += vx;
       petY += vy;
-    }
-    if (!isSleeping && !sleepSequenceActive && !pendingWake) {
-      const totalWidth = canvas.width - PET_WIDTH;
-      if (petX < 0) {
-        petX = 0;
-        direction = 1;
-        vx = Math.abs(vx);
-        currentImg = petImgRight;
-      } else if (petX > totalWidth) {
-        petX = totalWidth;
-        direction = -1;
-        vx = -Math.abs(vx);
-        currentImg = petImgLeft;
-      }
     }
     if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
       if (pigHitsBallFront(ball)) {
@@ -569,13 +508,25 @@ function animate() {
     let groundY = getGroundY();
     if (petY >= groundY) {
       petY = groundY;
+      vy = 0;
+      // Edge bounce for ball chase mode
+      const totalWidth = canvas.width - PET_WIDTH;
+      let bounced = false;
+      if (petX < 0) {
+        petX = 0;
+        direction = 1;
+        bounced = true;
+      }
+      if (petX > totalWidth) {
+        petX = totalWidth;
+        direction = -1;
+        bounced = true;
+      }
       if (pendingSleep) {
         vx = 0;
         vy = 0;
         pendingSleep = false;
         runSleepSequence();
-      } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
-        startAutoJump();
       }
     }
   }
@@ -636,8 +587,7 @@ window.addEventListener('DOMContentLoaded', () => {
       currentImg = petImgLeft;
       resumeDirection = direction;
       resumeImg = currentImg;
-      startAutoJump();
-      animate();
+      requestAnimationFrame(animate);
     })
     .catch((err) => {
       console.error("One or more images failed to load.", err);
