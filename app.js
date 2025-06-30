@@ -221,6 +221,8 @@ function showBallForDuration() {
       } else {
         showBall = false;
         ballAlpha = 1;
+        ball = null; // Ensure play sequence ends
+        pigAvoidingBall = false;
       }
     }
     fadeStep();
@@ -448,14 +450,13 @@ function updatePigChase() {
 
   // Handle pig avoidance -- ignore chasing until past target
   if (pigAvoidingBall) {
-    // Move pig in direction until past target
     if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
         (direction === -1 && petX + PET_WIDTH / 2 > pigAvoidBallTargetX)) {
-      vx = 3 * 0.4 * direction; // keep moving, same as chase speed
+      vx = 3 * 0.4 * direction;
       currentImg = direction === 1 ? petImgRight : petImgLeft;
-      return; // skip chasing
+      return;
     } else {
-      pigAvoidingBall = false; // done avoiding, can chase again
+      pigAvoidingBall = false;
     }
   }
 
@@ -490,7 +491,7 @@ function animate() {
   drawBall();
 
   // If not chasing a ball, the pig bounces continuously
-  if (!showBall || !ball) {
+  if (!showBall) {
     // If pig was avoiding ball but ball is gone, keep going until target passed
     if (pigAvoidingBall) {
       if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
@@ -498,7 +499,7 @@ function animate() {
         vx = 3 * 0.4 * direction;
         currentImg = direction === 1 ? petImgRight : petImgLeft;
       } else {
-        pigAvoidingBall = false; // done avoiding, resume normal
+        pigAvoidingBall = false;
       }
     }
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
@@ -507,23 +508,22 @@ function animate() {
       petY += vy;
 
       const totalWidth = canvas.width - PET_WIDTH;
-
-      // Clamp to valid range
-      if (petX < 0) petX = 0;
-      if (petX > totalWidth) petX = totalWidth;
-
+      let bounced = false;
       let groundY = getGroundY();
+
       if (petY >= groundY) {
         petY = groundY;
         vy = 0;
-
-        // Snap to edge if pig reached it (avoid drifting)
-        if (petX <= 0) {
+        // Bounce at the edges, with no slowdown!
+        if (petX < 0) {
           petX = 0;
           direction = 1;
-        } else if (petX >= totalWidth) {
+          bounced = true;
+        }
+        if (petX > totalWidth) {
           petX = totalWidth;
           direction = -1;
+          bounced = true;
         }
         startAutoJump();
       }
@@ -532,7 +532,6 @@ function animate() {
     updatePigChase();
     resolvePigBallOverlap();
 
-    // If ball disappears while pig is avoiding, keep going until target is passed
     if (!showBall && pigAvoidingBall) {
       if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
           (direction === -1 && petX + PET_WIDTH / 2 > pigAvoidBallTargetX)) {
@@ -549,13 +548,14 @@ function animate() {
       petY += vy;
     }
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
-      if (petX <= 0) {
+      const totalWidth = canvas.width - PET_WIDTH;
+      if (petX < 0) {
         petX = 0;
         direction = 1;
         vx = Math.abs(vx);
         currentImg = petImgRight;
-      } else if (petX + PET_WIDTH >= canvas.width) {
-        petX = canvas.width - PET_WIDTH;
+      } else if (petX > totalWidth) {
+        petX = totalWidth;
         direction = -1;
         vx = -Math.abs(vx);
         currentImg = petImgLeft;
