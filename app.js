@@ -267,26 +267,32 @@ function runSleepSequence() {
 }
 
 // --- Auto jump logic for continuous bouncing ---
-// Each jump covers 1/5 of the screen
+// Pig always takes 5 even jumps to cross the screen left-right or right-left
 function startAutoJump() {
-  // Amount of screen to cover per jump (1/5th of available width)
-  const jumpFraction = 1 / 5;
-  const groundY = getGroundY();
-
-  // Pig's starting position
-  const startX = petX;
-  // Target distance per jump
   const totalWidth = canvas.width - PET_WIDTH;
-  const dx = direction === 1
-    ? Math.min(totalWidth - startX, totalWidth * jumpFraction)
-    : -Math.min(startX, totalWidth * jumpFraction);
-
-  // Time in frames and seconds (tweak for smooth, not too fast)
-  const jumpDurationSeconds = 0.8; // Around 0.8s per jump (5 in 4s)
+  const jumpCount = 5;
+  const jumpDistance = totalWidth / jumpCount;
+  const jumpDurationSeconds = 0.8; // tweak for a smooth arc
   const fps = 60;
   const frames = jumpDurationSeconds * fps;
 
-  vx = dx / frames; // pixels per frame
+  // Clamp pigX to valid range before starting jump
+  if (petX < 0) petX = 0;
+  if (petX > totalWidth) petX = totalWidth;
+
+  // Compute the jump target
+  let targetX;
+  if (direction === 1) {
+    targetX = petX + jumpDistance;
+    if (targetX > totalWidth) targetX = totalWidth;
+  } else {
+    targetX = petX - jumpDistance;
+    if (targetX < 0) targetX = 0;
+  }
+  // Calculate actual distance to travel
+  const dx = targetX - petX;
+
+  vx = dx / frames;
 
   // Gentle vertical jump
   const jumpHeight = 32;
@@ -484,23 +490,25 @@ function animate() {
       petX += vx;
       petY += vy;
 
-      // Bounce off sides and start next jump
-      if (petX <= 0) {
-        petX = 0;
-        direction = 1;
-        currentImg = petImgRight;
-        startAutoJump();
-      } else if (petX + PET_WIDTH >= canvas.width) {
-        petX = canvas.width - PET_WIDTH;
-        direction = -1;
-        currentImg = petImgLeft;
-        startAutoJump();
-      }
-      // On ground, start another jump toward the current direction
+      const totalWidth = canvas.width - PET_WIDTH;
+
+      // Clamp to valid range
+      if (petX < 0) petX = 0;
+      if (petX > totalWidth) petX = totalWidth;
+
       let groundY = getGroundY();
       if (petY >= groundY) {
         petY = groundY;
         vy = 0;
+
+        // Snap to edge if pig reached it (avoid drifting)
+        if (petX <= 0) {
+          petX = 0;
+          direction = 1;
+        } else if (petX >= totalWidth) {
+          petX = totalWidth;
+          direction = -1;
+        }
         startAutoJump();
       }
     }
@@ -539,7 +547,6 @@ function animate() {
         pendingSleep = false;
         runSleepSequence();
       } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
-        // On ground during play, jump as normal (tuned for play, could be different if needed)
         startAutoJump();
       }
     }
