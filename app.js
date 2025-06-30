@@ -66,6 +66,10 @@ let fadeBallTimeout = null;
 // --- Action Lock ---
 let actionInProgress = false;
 
+// --- Ball Gone Pause Logic ---
+let justPausedAfterBall = false;
+let ballGonePauseUntil = 0;
+
 // --- Shared Ground Logic ---
 function getGroundY() {
   return canvas.height - PET_HEIGHT;
@@ -223,6 +227,9 @@ function showBallForDuration() {
         ballAlpha = 1;
         ball = null;
         pigAvoidingBall = false;
+        // --- Ball pause logic: start pause when ball is fully gone
+        justPausedAfterBall = true;
+        ballGonePauseUntil = Date.now() + 2000;
       }
     }
     fadeStep();
@@ -496,6 +503,24 @@ function animate() {
 
   updateBall();
   drawBall();
+
+  // --- Ball gone pause logic ---
+  if (justPausedAfterBall) {
+    // Stop all movement for 2 seconds
+    vx = 0;
+    vy = 0;
+    // (petY gets reset below)
+    if (Date.now() >= ballGonePauseUntil) {
+      justPausedAfterBall = false;
+      // After pause, start normal auto-jump again
+      startAutoJump();
+    }
+    // draw pig at ground
+    petY = getGroundY();
+    ctx.drawImage(currentImg, petX, petY, PET_WIDTH, PET_HEIGHT);
+    requestAnimationFrame(animate);
+    return;
+  }
 
   // If not chasing a ball, the pig bounces continuously
   if (!showBall || !ball) {
