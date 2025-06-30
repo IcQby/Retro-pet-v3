@@ -406,6 +406,39 @@ function drawBall() {
   ctx.restore();
 }
 
+// --- Pig Chasing Ball Logic ---
+function updatePigChase() {
+  // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
+  if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
+
+  // Consider the center of the pig horizontally
+  const pigCenterX = petX + PET_WIDTH / 2;
+  // Ball's x
+  const ballX = ball.x;
+
+  // Pig chases ball if not touching it
+  // (give a small deadzone so pig doesn't jitter at the ball)
+  const chaseSpeed = 3; // speed of pig when chasing
+  const deadzone = BALL_RADIUS + 10;
+  if (Math.abs(ballX - pigCenterX) > deadzone) {
+    // Go towards the ball
+    if (ballX > pigCenterX) {
+      direction = 1;
+      vx = chaseSpeed;
+      currentImg = petImgRight;
+    } else {
+      direction = -1;
+      vx = -chaseSpeed;
+      currentImg = petImgLeft;
+    }
+  } else {
+    vx = 0; // reached ball
+    // Keep facing the ball
+    if (direction === 1) currentImg = petImgRight;
+    else currentImg = petImgLeft;
+  }
+}
+
 function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
@@ -413,6 +446,9 @@ function animate() {
   // Ball physics and drawing
   updateBall();
   drawBall();
+
+  // Pig chase logic
+  updatePigChase();
 
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     vy += gravity;
