@@ -8,6 +8,28 @@ petImgRight.src = 'icon/pig-right.png';
 petImgSleep.src = 'icon/pig-sleep.png';
 petImgSleepR.src = 'icon/pig-sleepR.png';
 
+// --- Ball Images ---
+const ballImages = [
+  'icon/ball1.png',
+  'icon/ball2.png',
+  'icon/ball3.png'
+];
+const BALL_DISPLAY_SIZE = 50;
+const BALL_RADIUS = BALL_DISPLAY_SIZE / 2;
+const ballGroundY = 270; // ground level for balls
+
+// Ball objects
+const balls = [
+  { x: 100, y: 50, vx: 2, vy: 0, radius: BALL_RADIUS, img: null },
+  { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null },
+  { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
+];
+
+// Ball physics constants
+const ballGravity = 0.5;
+const ballAirFriction = 0.99;
+const ballBounce = 0.7;
+
 // --- Canvas and Rendering ---
 const canvas = document.getElementById('pet-canvas');
 const ctx = canvas.getContext('2d');
@@ -68,6 +90,24 @@ function loadImages(images) {
       img =>
         new Promise((resolve, reject) => {
           img.onload = resolve;
+          img.onerror = reject;
+        })
+    )
+  );
+}
+
+// --- Ball Image Preload ---
+function loadBallImages() {
+  return Promise.all(
+    ballImages.map(
+      (src, i) =>
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.src = src;
+          img.onload = () => {
+            balls[i].img = img;
+            resolve();
+          };
           img.onerror = reject;
         })
     )
@@ -166,13 +206,67 @@ function drawBackground() {
   ctx.fillRect(0, canvas.height * 2 / 3, canvas.width, canvas.height / 3);
   ctx.fillStyle = '#ADD8E6';
   ctx.fillRect(0, 0, canvas.width, canvas.height * 2 / 3);
+  // Draw ground line for balls
+  ctx.beginPath();
+  ctx.moveTo(0, ballGroundY + BALL_RADIUS);
+  ctx.lineTo(canvas.width, ballGroundY + BALL_RADIUS);
+  ctx.strokeStyle = '#aaa';
+  ctx.stroke();
+}
+
+// --- Ball Physics Update ---
+function updateBalls() {
+  for (const ball of balls) {
+    // Gravity
+    ball.vy += ballGravity;
+    // Air friction
+    ball.vx *= ballAirFriction;
+    ball.vy *= ballAirFriction;
+    // Move
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    // Ground collision
+    if (ball.y + BALL_RADIUS > ballGroundY + BALL_RADIUS) {
+      ball.y = ballGroundY;
+      ball.vy *= -ballBounce;
+      if (Math.abs(ball.vy) < 1) ball.vy = 0;
+    }
+    // Wall collisions
+    if (ball.x - BALL_RADIUS < 0) {
+      ball.x = BALL_RADIUS;
+      ball.vx *= -ballBounce;
+    }
+    if (ball.x + BALL_RADIUS > canvas.width) {
+      ball.x = canvas.width - BALL_RADIUS;
+      ball.vx *= -ballBounce;
+    }
+  }
+}
+
+// --- Ball Drawing ---
+function drawBalls() {
+  for (const ball of balls) {
+    if (ball.img) {
+      ctx.drawImage(
+        ball.img,
+        ball.x - BALL_RADIUS,
+        ball.y - BALL_RADIUS,
+        BALL_DISPLAY_SIZE,
+        BALL_DISPLAY_SIZE
+      );
+    }
+  }
 }
 
 function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
 
-  // Only move if not sleeping, not in sleep sequence, not pendingWake
+  // Ball physics and drawing
+  updateBalls();
+  drawBalls();
+
+  // Only move pet if not sleeping, not in sleep sequence, not pendingWake
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     vy += gravity;
     petX += vx;
@@ -254,7 +348,10 @@ window.addEventListener('DOMContentLoaded', () => {
   window.__pet_loaded__ = true;
   resizeCanvas();
   updateStats();
-  loadImages([petImgLeft, petImgRight, petImgSleep, petImgSleepR])
+  Promise.all([
+    loadImages([petImgLeft, petImgRight, petImgSleep, petImgSleepR]),
+    loadBallImages()
+  ])
     .then(() => {
       petX = canvas.width - PET_WIDTH - 10;
       petY = canvas.height - PET_HEIGHT;
