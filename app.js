@@ -45,9 +45,9 @@ let pet = {
   health: 50,
 };
 
-// --- Ball State (now just one) ---
+// --- Ball State (only one at a time) ---
 let ball = null; // will be {x, y, vx, vy, radius, img, angle}
-let ballImgObjects = []; // for preloaded images
+let ballImgObjects = []; // preloaded images
 
 const ballGravity = 0.5;
 const ballAirFriction = 0.99;
@@ -60,7 +60,7 @@ let showBallTimeout = null;
 let fadeBallTimeout = null;
 
 // --- Action Lock ---
-let actionInProgress = false; // Used to lock/unlock buttons during action
+let actionInProgress = false; // Used to lock/unlock buttons during effect
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -124,31 +124,35 @@ function loadBallImages() {
 }
 
 // --- Pet Care Functions (exposed to window) ---
-window.feedPet = function() {
-  if (actionInProgress) return;
-  lockActionsForDuration(1000); // Example: Lock for 1s (customize for real feed animation)
+function effectGuard(fn) {
+  // Helper to wrap all pet actions so only one runs at a time
+  return function(...args) {
+    if (actionInProgress) return;
+    fn.apply(this, args);
+  };
+}
+
+window.feedPet = effectGuard(function() {
+  lockActionsForDuration(1000); // Lock for 1s
   pet.hunger = Math.max(0, pet.hunger - 15);
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
   registerBackgroundSync('sync-feed-pet');
-};
-window.playWithPet = function() {
-  if (actionInProgress) return;
+});
+window.playWithPet = effectGuard(function() {
   lockActionsForDuration(15000); // 10s visible + 5s fade for ball
   pet.happiness = Math.min(100, pet.happiness + 10);
   pet.hunger = Math.min(100, pet.hunger + 5);
   updateStats();
   showBallForDuration();
-};
-window.cleanPet = function() {
-  if (actionInProgress) return;
-  lockActionsForDuration(2000); // Example: Lock for 2s (customize as needed)
+});
+window.cleanPet = effectGuard(function() {
+  lockActionsForDuration(2000); // Lock for 2s
   pet.cleanliness = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
-};
-window.sleepPet = function() {
-  if (actionInProgress) return;
+});
+window.sleepPet = effectGuard(function() {
   lockActionsForDuration(9000); // Approx 9s for sleep sequence
   pet.health = Math.min(100, pet.health + 10);
   pet.hunger = Math.min(100, pet.hunger + 10);
@@ -159,14 +163,13 @@ window.sleepPet = function() {
     resumeImg = (direction === 1) ? petImgRight : petImgLeft;
     pendingSleep = true;
   }
-};
-window.healPet = function() {
-  if (actionInProgress) return;
-  lockActionsForDuration(1000); // Example: Lock for 1s
+});
+window.healPet = effectGuard(function() {
+  lockActionsForDuration(1000); // Lock for 1s
   pet.health = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
-};
+});
 
 // --- Action Lock Helper ---
 function lockActionsForDuration(ms) {
@@ -179,24 +182,25 @@ function lockActionsForDuration(ms) {
   }, ms);
 }
 
-// --- Ball Show/Hide Logic (now for a single random ball) ---
+// --- Ball Show/Hide Logic (for a single random ball, top half only) ---
 function showBallForDuration() {
   clearTimeout(showBallTimeout);
   clearTimeout(fadeBallTimeout);
   showBall = true;
   ballAlpha = 1;
 
-  // Pick a random image and a random position, random velocity
+  // Pick a random image and a random position (top half only), random velocity
   const imgIndex = Math.floor(Math.random() * ballImgObjects.length);
   const img = ballImgObjects[imgIndex];
 
-  // Choose a random x within canvas, not too close to edge
+  // x: not too close to edge
   const margin = BALL_RADIUS + 5;
   const minX = margin;
   const maxX = canvas.width - margin;
+
+  // y: only in top half
   const minY = margin;
-  // Height should be above the grass but not too high (e.g. upper 2/3 of sky)
-  const maxY = getGroundY() + PET_HEIGHT - BALL_RADIUS - 40;
+  const maxY = Math.floor(canvas.height / 2) - margin;
   const randX = minX + Math.random() * (maxX - minX);
   const randY = minY + Math.random() * (maxY - minY);
 
@@ -332,7 +336,7 @@ function drawBackground() {
   ctx.fillRect(0, 0, canvas.width, getGroundY());
 }
 
-// --- Ball Physics Update (now just one) ---
+// --- Ball Physics Update (only one) ---
 function updateBall() {
   if (!showBall || !ball) return;
 
@@ -368,7 +372,7 @@ function updateBall() {
   }
 }
 
-// --- Ball Drawing (now just one) ---
+// --- Ball Drawing (only one) ---
 function drawBall() {
   if (!showBall || !ball) return;
   ctx.save();
