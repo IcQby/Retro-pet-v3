@@ -316,9 +316,8 @@ function updateBalls() {
     ball.x += ball.vx;
     ball.y += ball.vy;
 
-    // --- Ball rotation: angle proportional to vertical speed ---
-    // You can adjust the multiplier for more/less spin!
-    ball.angle += ball.vy / 25;
+    // --- Ball rotation: angle proportional to horizontal speed ---
+    ball.angle += ball.vx / BALL_RADIUS;
 
     // --- Shared ground: balls rest on the grass line where the pig walks ---
     const pigGroundY = getGroundY();
