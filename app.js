@@ -278,9 +278,9 @@ function runSleepSequence() {
 }
 
 // --- v21 Jump Logic (restore this version for v21 "wider" jumps) ---
-function startJump() {
-  // "Wider" but normal speed jump for v21
-  const speed = 6;
+function startJump(jumpSpeedFactor = 1) {
+  // "Wider" but normal speed jump for v21, now supports speed factor
+  const speed = 6 * jumpSpeedFactor;
   const angle = Math.PI * 45 / 180; // 45° for a wide arc
   vx = direction * speed * Math.cos(angle);
   vy = -speed * Math.sin(angle);
@@ -288,7 +288,6 @@ function startJump() {
 
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
-  // Make it fly much faster than before
   const baseSpeed = Math.max(Math.abs(vx), 4);
   const speed = (3 + Math.random() * 1.5) * baseSpeed;
   const dir = direction;
@@ -525,7 +524,8 @@ function animate() {
       pendingSleep = false;
       runSleepSequence();
     } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
-      startJump();
+      // If normal jump (not play), use 50% speed
+      startJump(0.5);
     }
   }
 
