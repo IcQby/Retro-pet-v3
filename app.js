@@ -37,10 +37,6 @@ let pendingSleep = false;
 let pendingWake = false;
 let wakeTimeoutId = null;
 
-// --- Pig Ball Avoidance State ---
-let pigAvoidingBall = false;
-let pigAvoidBallTargetX = 0;
-
 // --- Stats Logic ---
 let pet = {
   happiness: 50,
@@ -50,8 +46,8 @@ let pet = {
 };
 
 // --- Ball State (only one at a time) ---
-let ball = null;
-let ballImgObjects = [];
+let ball = null; // will be {x, y, vx, vy, radius, img, angle}
+let ballImgObjects = []; // preloaded images
 
 const ballGravity = 0.5;
 const ballAirFriction = 0.99;
@@ -64,7 +60,7 @@ let showBallTimeout = null;
 let fadeBallTimeout = null;
 
 // --- Action Lock ---
-let actionInProgress = false;
+let actionInProgress = false; // Used to lock/unlock buttons during effect
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -109,52 +105,55 @@ function loadImages(images) {
   );
 }
 
+// --- Ball Image Preload (array of Image objects) ---
 function loadBallImages() {
   return Promise.all(
-    ballImages.map((src, i) =>
-      new Promise((resolve, reject) => {
-        const img = new Image();
-        img.src = src;
-        img.onload = () => {
-          ballImgObjects[i] = img;
-          resolve();
-        };
-        img.onerror = reject;
-      })
+    ballImages.map(
+      (src, i) =>
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.src = src;
+          img.onload = () => {
+            ballImgObjects[i] = img;
+            resolve();
+          };
+          img.onerror = reject;
+        })
     )
   );
 }
 
 // --- Pet Care Functions (exposed to window) ---
 function effectGuard(fn) {
-  return function (...args) {
+  // Helper to wrap all pet actions so only one runs at a time
+  return function(...args) {
     if (actionInProgress) return;
     fn.apply(this, args);
   };
 }
 
-window.feedPet = effectGuard(function () {
-  lockActionsForDuration(1000);
+window.feedPet = effectGuard(function() {
+  lockActionsForDuration(1000); // Lock for 1s
   pet.hunger = Math.max(0, pet.hunger - 15);
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
   registerBackgroundSync('sync-feed-pet');
 });
-window.playWithPet = effectGuard(function () {
-  lockActionsForDuration(15000);
+window.playWithPet = effectGuard(function() {
+  lockActionsForDuration(15000); // 10s visible + 5s fade for ball
   pet.happiness = Math.min(100, pet.happiness + 10);
   pet.hunger = Math.min(100, pet.hunger + 5);
   updateStats();
   showBallForDuration();
 });
-window.cleanPet = effectGuard(function () {
-  lockActionsForDuration(2000);
+window.cleanPet = effectGuard(function() {
+  lockActionsForDuration(2000); // Lock for 2s
   pet.cleanliness = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 });
-window.sleepPet = effectGuard(function () {
-  lockActionsForDuration(9000);
+window.sleepPet = effectGuard(function() {
+  lockActionsForDuration(9000); // Approx 9s for sleep sequence
   pet.health = Math.min(100, pet.health + 10);
   pet.hunger = Math.min(100, pet.hunger + 10);
   updateStats();
@@ -165,13 +164,14 @@ window.sleepPet = effectGuard(function () {
     pendingSleep = true;
   }
 });
-window.healPet = effectGuard(function () {
-  lockActionsForDuration(1000);
+window.healPet = effectGuard(function() {
+  lockActionsForDuration(1000); // Lock for 1s
   pet.health = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 });
 
+// --- Action Lock Helper ---
 function lockActionsForDuration(ms) {
   if (actionInProgress) return;
   actionInProgress = true;
@@ -182,22 +182,29 @@ function lockActionsForDuration(ms) {
   }, ms);
 }
 
-// --- Ball Show/Hide Logic ---
+// --- Ball Show/Hide Logic (for a single random ball, top half only) ---
 function showBallForDuration() {
   clearTimeout(showBallTimeout);
   clearTimeout(fadeBallTimeout);
   showBall = true;
   ballAlpha = 1;
 
+  // Pick a random image and a random position (top half only), random velocity
   const imgIndex = Math.floor(Math.random() * ballImgObjects.length);
   const img = ballImgObjects[imgIndex];
+
+  // x: not too close to edge
   const margin = BALL_RADIUS + 5;
   const minX = margin;
   const maxX = canvas.width - margin;
+
+  // y: only in top half
   const minY = margin;
   const maxY = Math.floor(canvas.height / 2) - margin;
   const randX = minX + Math.random() * (maxX - minX);
   const randY = minY + Math.random() * (maxY - minY);
+
+  // Random initial velocity
   const randVx = (Math.random() - 0.5) * 5;
   const randVy = (Math.random() - 0.2) * 3;
 
@@ -208,21 +215,20 @@ function showBallForDuration() {
     vy: randVy,
     radius: BALL_RADIUS,
     img: img,
-    angle: 0,
+    angle: 0
   };
 
+  // After 10s, start fading over 5s
   showBallTimeout = setTimeout(() => {
     let fadeStart = Date.now();
     function fadeStep() {
       let elapsed = Date.now() - fadeStart;
-      ballAlpha = Math.max(0, 1 - elapsed / 5000);
+      ballAlpha = Math.max(0, 1 - (elapsed / 5000));
       if (ballAlpha > 0) {
         fadeBallTimeout = setTimeout(fadeStep, 16);
       } else {
         showBall = false;
         ballAlpha = 1;
-        ball = null; // End play sequence
-        pigAvoidingBall = false;
       }
     }
     fadeStep();
@@ -236,8 +242,8 @@ function runSleepSequence() {
   sleepRequested = false;
 
   let imgA = resumeImg;
-  let imgB = resumeImg === petImgRight ? petImgLeft : petImgRight;
-  let sleepImg = resumeImg === petImgRight ? petImgSleepR : petImgSleep;
+  let imgB = (resumeImg === petImgRight) ? petImgLeft : petImgRight;
+  let sleepImg = (resumeImg === petImgRight) ? petImgSleepR : petImgSleep;
 
   currentImg = imgA;
 
@@ -255,15 +261,14 @@ function runSleepSequence() {
             currentImg = imgA;
             isSleeping = false;
             pendingWake = true;
-            vx = 0;
-            vy = 0;
+            vx = 0; vy = 0;
             wakeTimeoutId = setTimeout(() => {
               pendingWake = false;
               sleepSequenceStep = 0;
               sleepSequenceActive = false;
               direction = resumeDirection;
-              currentImg = direction === 1 ? petImgRight : petImgLeft;
-              // Resume idle movement
+              currentImg = (direction === 1) ? petImgRight : petImgLeft;
+              startJump();
             }, 2000);
           }, 5000);
         }, 500);
@@ -272,103 +277,83 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- v18-like idle movement logic, for movement between actions ---
-function updateIdleMovement() {
-  // Only move if not sleeping, not in play/ball mode, not in button action, not in avoidance
-  if (isSleeping || sleepSequenceActive || pendingWake || actionInProgress || showBall || pigAvoidingBall) return;
-
-  // Pig walks at a constant speed, reverses at edges
-  const speed = 2;
-  petX += direction * speed;
-
-  // Bounce on edges
-  const minX = 0;
-  const maxX = canvas.width - PET_WIDTH;
-  if (petX < minX) {
-    petX = minX;
-    direction = 1;
-    currentImg = petImgRight;
-  } else if (petX > maxX) {
-    petX = maxX;
-    direction = -1;
-    currentImg = petImgLeft;
-  }
-
-  // Always on the ground
-  petY = getGroundY();
-
-  // Animation frame
-  currentImg = direction === 1 ? petImgRight : petImgLeft;
+function startJump() {
+  const speed = 6, angle = Math.PI * 65 / 180;
+  vx = direction * speed * Math.cos(angle);
+  vy = -speed * Math.sin(angle);
 }
 
-// --- Pig-ball overlap avoidance ---
-// Only trigger avoidance if the pig's rectangle fully contains the ball's center
+// --- Kick a ball with an arc when the pig hits its front! ---
+function kickBallFromPig(ball) {
+  // Make it fly much faster than before
+  const baseSpeed = Math.max(Math.abs(vx), 4); // double previous min speed
+  const speed = (3 + Math.random() * 1.5) * baseSpeed; // higher base (was 1.5~2.5x)
+  const dir = direction;
+
+  // 2x as much chance to go up at 45-60°
+  // 0-1: 2/3 chance for 45-60°, 1/3 for 0-45°
+  if (Math.random() < 2/3) {
+    // Angle between 45° and 60°
+    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12); // 45° to 60°
+    ball.vx = dir * speed * Math.cos(angle);
+    ball.vy = -speed * Math.sin(angle);
+  } else {
+    // Angle between 0° and 45°
+    const angle = Math.random() * (Math.PI / 4); // 0° to 45°
+    ball.vx = dir * speed * Math.cos(angle);
+    ball.vy = -speed * Math.sin(angle);
+  }
+}
+
+// --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
+// Returns true if the pig and ball overlap, and also resolves overlap by pushing pig out
 function resolvePigBallOverlap() {
   if (!showBall || !ball) return false;
+  // Pig rectangle:
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
   const pigTop = petY;
   const pigBottom = petY + PET_HEIGHT;
-  const bx = ball.x, by = ball.y;
+  // Ball center and radius:
+  const bx = ball.x, by = ball.y, r = ball.radius;
 
-  // Only avoid if ball center is within pig rectangle (not just touching)
-  if (bx > pigLeft && bx < pigRight && by > pigTop && by < pigBottom) {
-    pigAvoidingBall = true;
-    if (direction === 1) {
-      pigAvoidBallTargetX = bx + 1.5 * PET_WIDTH;
+  // Find closest point on the pig rect to the ball center
+  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
+  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
+  const dx = bx - closestX;
+  const dy = by - closestY;
+  const distSq = dx * dx + dy * dy;
+
+  if (distSq < r * r) {
+    // Overlap: push the pig out along the minimal axis
+    const dist = Math.sqrt(distSq) || 0.01;
+    const overlap = r - dist;
+    // Direction to push pig: from ball to pig
+    const pushX = dx / dist;
+    const pushY = dy / dist;
+    // Move pig minimally on x/y axis to resolve overlap
+    // Only move in x direction (since pig walks horizontally)
+    if (Math.abs(pushX) > Math.abs(pushY)) {
+      petX += (pushX * overlap);
+      // Clamp to canvas
+      petX = Math.max(0, Math.min(petX, canvas.width - PET_WIDTH));
     } else {
-      pigAvoidBallTargetX = bx - 1.5 * PET_WIDTH;
+      petY += (pushY * overlap);
+      // Clamp to ground
+      petY = Math.max(0, Math.min(petY, getGroundY()));
     }
     return true;
   }
   return false;
 }
 
-// --- Ball physics, collision, etc ---
-function kickBallFromPig(ball) {
-  const baseSpeed = Math.max(Math.abs(vx), 4);
-  const speed = (3 + Math.random() * 1.5) * baseSpeed;
-  const dir = direction;
-  if (Math.random() < 2 / 3) {
-    const angle = Math.PI / 4 + Math.random() * (Math.PI / 12);
-    ball.vx = dir * speed * Math.cos(angle);
-    ball.vy = -speed * Math.sin(angle);
-  } else {
-    const angle = Math.random() * (Math.PI / 4);
-    ball.vx = dir * speed * Math.cos(angle);
-    ball.vy = -speed * Math.sin(angle);
-  }
-}
-
-function ballBounceOnPigTop() {
-  if (!showBall || !ball) return;
-  const pigTopY = petY;
-  const pigLeft = petX;
-  const pigRight = petX + PET_WIDTH;
-  const prevY = ball.y - ball.vy;
-  const ballBottom = ball.y + BALL_RADIUS;
-  if (
-    ball.vy > 0 &&
-    prevY + BALL_RADIUS <= pigTopY - 1 &&
-    ballBottom >= pigTopY &&
-    ball.x + BALL_RADIUS > pigLeft + 5 &&
-    ball.x - BALL_RADIUS < pigRight - 5
-  ) {
-    ball.y = pigTopY - BALL_RADIUS;
-    ball.vy *= -ballBounce;
-    ball.vx += vx * 0.5;
-    ball.vx *= 0.98;
-  }
-}
-
+// --- Pig-ball front collision detection ---
 function pigHitsBallFront(ball) {
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
   const pigTop = petY;
   const pigBottom = petY + PET_HEIGHT;
-  const bx = ball.x,
-    by = ball.y,
-    r = ball.radius;
+  const bx = ball.x, by = ball.y, r = ball.radius;
   const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
   const closestY = Math.max(pigTop, Math.min(by, pigBottom));
   const dx = bx - closestX;
@@ -383,6 +368,20 @@ function pigHitsBallFront(ball) {
   return false;
 }
 
+// --- Ball-to-pig normal collision (non-front, for completeness) ---
+function pigHitsBallAny(ball) {
+  const pigLeft = petX;
+  const pigRight = petX + PET_WIDTH;
+  const pigTop = petY;
+  const pigBottom = petY + PET_HEIGHT;
+  const bx = ball.x, by = ball.y, r = ball.radius;
+  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
+  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
+  const dx = bx - closestX;
+  const dy = by - closestY;
+  return dx * dx + dy * dy < r * r;
+}
+
 // --- Animation/Background ---
 function drawBackground() {
   ctx.fillStyle = '#90EE90';
@@ -391,26 +390,32 @@ function drawBackground() {
   ctx.fillRect(0, 0, canvas.width, getGroundY());
 }
 
+// --- Ball Physics Update (only one) ---
 function updateBall() {
   if (!showBall || !ball) return;
 
+  // Gravity
   ball.vy += ballGravity;
+  // Air friction
   ball.vx *= ballAirFriction;
   ball.vy *= ballAirFriction;
-  ballBounceOnPigTop();
+  // Move
   ball.x += ball.vx;
   ball.y += ball.vy;
 
+  // Ball rotation proportional to horizontal speed
   ball.angle += ball.vx / BALL_RADIUS;
 
+  // Shared ground: balls rest on the grass line where the pig walks
   const pigGroundY = getGroundY();
   const ballRestY = pigGroundY + PET_HEIGHT - BALL_RADIUS;
   if (ball.y + BALL_RADIUS > ballRestY) {
     ball.y = ballRestY - BALL_RADIUS;
     ball.vy *= -ballBounce;
-    if (Math.abs(ball.vy) < 1) ball.vy = 0;
+    if (Math.abs(ball.vy) < 1) ball.vy = 0; // settle
   }
 
+  // Bounce off walls
   if (ball.x - BALL_RADIUS < 0) {
     ball.x = BALL_RADIUS;
     ball.vx *= -ballBounce;
@@ -421,6 +426,7 @@ function updateBall() {
   }
 }
 
+// --- Ball Drawing (only one) ---
 function drawBall() {
   if (!showBall || !ball) return;
   ctx.save();
@@ -444,26 +450,20 @@ function drawBall() {
 
 // --- Pig Chasing Ball Logic ---
 function updatePigChase() {
+  // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
   if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
 
-  // Handle pig avoidance -- ignore chasing until past target
-  if (pigAvoidingBall) {
-    if ((direction === 1 && petX + PET_WIDTH / 2 < pigAvoidBallTargetX) ||
-        (direction === -1 && petX + PET_WIDTH / 2 > pigAvoidBallTargetX)) {
-      vx = 3 * 0.4 * direction;
-      currentImg = direction === 1 ? petImgRight : petImgLeft;
-      return;
-    } else {
-      pigAvoidingBall = false;
-    }
-  }
-
+  // Consider the center of the pig horizontally
   const pigCenterX = petX + PET_WIDTH / 2;
+  // Ball's x
   const ballX = ball.x;
 
-  const chaseSpeed = 3 * 0.4;
+  // Pig chases ball if not touching it
+  // (give a small deadzone so pig doesn't jitter at the ball)
+  const chaseSpeed = 3; // speed of pig when chasing
   const deadzone = BALL_RADIUS + 10;
   if (Math.abs(ballX - pigCenterX) > deadzone) {
+    // Go towards the ball
     if (ballX > pigCenterX) {
       direction = 1;
       vx = chaseSpeed;
@@ -474,60 +474,63 @@ function updatePigChase() {
       currentImg = petImgLeft;
     }
   } else {
-    vx = 0;
+    vx = 0; // reached ball
+    // Keep facing the ball
     if (direction === 1) currentImg = petImgRight;
     else currentImg = petImgLeft;
   }
 }
 
-// --- Animate loop ---
 function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
 
+  // Ball physics and drawing
   updateBall();
   drawBall();
 
-  // --- v18-style idle movement between actions ---
-  updateIdleMovement();
+  // Pig chase logic
+  updatePigChase();
 
-  // Play/ball sequence and avoidance logic:
-  if (showBall && ball) {
-    updatePigChase();
-    resolvePigBallOverlap();
-    if (!isSleeping && !sleepSequenceActive && !pendingWake) {
-      vy += gravity;
-      petX += vx;
-      petY += vy;
+  // Prevent pig from overlapping with the ball
+  resolvePigBallOverlap();
+
+  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+    vy += gravity;
+    petX += vx;
+    petY += vy;
+  }
+
+  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+    if (petX <= 0) {
+      petX = 0;
+      direction = 1;
+      vx = Math.abs(vx);
+      currentImg = petImgRight;
+    } else if (petX + PET_WIDTH >= canvas.width) {
+      petX = canvas.width - PET_WIDTH;
+      direction = -1;
+      vx = -Math.abs(vx);
+      currentImg = petImgLeft;
     }
-    if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
-      if (pigHitsBallFront(ball)) {
-        kickBallFromPig(ball);
-      }
+  }
+
+  if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
+    if (pigHitsBallFront(ball)) {
+      kickBallFromPig(ball);
     }
-    let groundY = getGroundY();
-    if (petY >= groundY) {
-      petY = groundY;
+  }
+
+  let groundY = getGroundY();
+  if (petY >= groundY) {
+    petY = groundY;
+    if (pendingSleep) {
+      vx = 0;
       vy = 0;
-      // Edge bounce for ball chase mode
-      const totalWidth = canvas.width - PET_WIDTH;
-      let bounced = false;
-      if (petX < 0) {
-        petX = 0;
-        direction = 1;
-        bounced = true;
-      }
-      if (petX > totalWidth) {
-        petX = totalWidth;
-        direction = -1;
-        bounced = true;
-      }
-      if (pendingSleep) {
-        vx = 0;
-        vy = 0;
-        pendingSleep = false;
-        runSleepSequence();
-      }
+      pendingSleep = false;
+      runSleepSequence();
+    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
+      startJump();
     }
   }
 
@@ -587,7 +590,7 @@ window.addEventListener('DOMContentLoaded', () => {
       currentImg = petImgLeft;
       resumeDirection = direction;
       resumeImg = currentImg;
-      requestAnimationFrame(animate);
+      animate();
     })
     .catch((err) => {
       console.error("One or more images failed to load.", err);
