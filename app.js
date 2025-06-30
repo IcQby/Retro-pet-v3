@@ -16,19 +16,6 @@ const ballImages = [
 ];
 const BALL_DISPLAY_SIZE = 50;
 const BALL_RADIUS = BALL_DISPLAY_SIZE / 2;
-const ballGroundY = 270; // ground level for balls
-
-// Ball objects
-const balls = [
-  { x: 100, y: 50, vx: 2, vy: 0, radius: BALL_RADIUS, img: null },
-  { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null },
-  { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
-];
-
-// Ball physics constants
-const ballGravity = 0.5;
-const ballAirFriction = 0.99;
-const ballBounce = 0.7;
 
 // --- Canvas and Rendering ---
 const canvas = document.getElementById('pet-canvas');
@@ -58,6 +45,23 @@ let pet = {
   health: 50,
 };
 
+// --- Ball Physics ---
+const balls = [
+  { x: 100, y: 50, vx: 2, vy: 0, radius: BALL_RADIUS, img: null },
+  { x: 300, y: 80, vx: -1.5, vy: 0, radius: BALL_RADIUS, img: null },
+  { x: 500, y: 30, vx: 1, vy: 0, radius: BALL_RADIUS, img: null }
+];
+
+const ballGravity = 0.5;
+const ballAirFriction = 0.99;
+const ballBounce = 0.7;
+
+// --- Shared Ground Logic ---
+function getGroundY() {
+  // Both pig and balls use the same ground level for realism
+  return canvas.height - PET_HEIGHT;
+}
+
 // --- UI Helpers ---
 function setButtonsDisabled(disabled) {
   document.querySelectorAll('button').forEach(btn => {
@@ -76,6 +80,7 @@ function updateStats() {
 function resizeCanvas() {
   canvas.width = canvas.clientWidth;
   canvas.height = 300;
+  // Clamp pet position
   if (typeof petX !== 'undefined' && typeof petY !== 'undefined') {
     petX = Math.min(Math.max(petX, 0), canvas.width - PET_WIDTH - 10);
     petY = canvas.height - PET_HEIGHT;
@@ -203,19 +208,60 @@ function startJump() {
 // --- Animation/Background ---
 function drawBackground() {
   ctx.fillStyle = '#90EE90';
-  ctx.fillRect(0, canvas.height * 2 / 3, canvas.width, canvas.height / 3);
+  ctx.fillRect(0, getGroundY(), canvas.width, canvas.height - getGroundY());
   ctx.fillStyle = '#ADD8E6';
-  ctx.fillRect(0, 0, canvas.width, canvas.height * 2 / 3);
-  // Draw ground line for balls
-  ctx.beginPath();
-  ctx.moveTo(0, ballGroundY + BALL_RADIUS);
-  ctx.lineTo(canvas.width, ballGroundY + BALL_RADIUS);
-  ctx.strokeStyle = '#aaa';
-  ctx.stroke();
+  ctx.fillRect(0, 0, canvas.width, getGroundY());
+  // Draw ground line for balls (optional for debug)
+  // ctx.beginPath();
+  // ctx.moveTo(0, getGroundY() + BALL_RADIUS);
+  // ctx.lineTo(canvas.width, getGroundY() + BALL_RADIUS);
+  // ctx.strokeStyle = '#aaa';
+  // ctx.stroke();
 }
 
 // --- Ball Physics Update ---
 function updateBalls() {
+  // Ball-to-ball collisions (simple elastic, equal mass)
+  for (let i = 0; i < balls.length; i++) {
+    for (let j = i + 1; j < balls.length; j++) {
+      const b1 = balls[i];
+      const b2 = balls[j];
+      const dx = b2.x - b1.x;
+      const dy = b2.y - b1.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = b1.radius + b2.radius;
+      if (dist < minDist) {
+        // Minimal translation distance to separate balls
+        const overlap = (minDist - dist) / 2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        b1.x -= nx * overlap;
+        b1.y -= ny * overlap;
+        b2.x += nx * overlap;
+        b2.y += ny * overlap;
+
+        // Calculate velocities along the normal
+        const dvx = b2.vx - b1.vx;
+        const dvy = b2.vy - b1.vy;
+        const vn = dvx * nx + dvy * ny;
+        if (vn < 0) { // Only resolve if balls moving toward each other
+          // Exchange velocities (perfectly elastic, equal mass)
+          const impulse = 2 * vn / 2; // mass cancels out
+          b1.vx += impulse * nx;
+          b1.vy += impulse * ny;
+          b2.vx -= impulse * nx;
+          b2.vy -= impulse * ny;
+          // Slightly dampen after collision
+          b1.vx *= ballBounce;
+          b1.vy *= ballBounce;
+          b2.vx *= ballBounce;
+          b2.vy *= ballBounce;
+        }
+      }
+    }
+  }
+
+  // Ball motion, ground and wall bounce
   for (const ball of balls) {
     // Gravity
     ball.vy += ballGravity;
@@ -225,13 +271,16 @@ function updateBalls() {
     // Move
     ball.x += ball.vx;
     ball.y += ball.vy;
-    // Ground collision
-    if (ball.y + BALL_RADIUS > ballGroundY + BALL_RADIUS) {
-      ball.y = ballGroundY;
+
+    // Bounce off ground (shared with pig)
+    const groundY = getGroundY();
+    if (ball.y + BALL_RADIUS > groundY + BALL_RADIUS) {
+      ball.y = groundY;
       ball.vy *= -ballBounce;
-      if (Math.abs(ball.vy) < 1) ball.vy = 0;
+      if (Math.abs(ball.vy) < 1) ball.vy = 0; // settle
     }
-    // Wall collisions
+
+    // Bounce off walls
     if (ball.x - BALL_RADIUS < 0) {
       ball.x = BALL_RADIUS;
       ball.vx *= -ballBounce;
@@ -273,7 +322,7 @@ function animate() {
     petY += vy;
   }
 
-  // Wall bounce
+  // Wall bounce for pig
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     if (petX <= 0) {
       petX = 0;
@@ -289,7 +338,7 @@ function animate() {
   }
 
   // Landing logic
-  let groundY = canvas.height - PET_HEIGHT;
+  let groundY = getGroundY();
   if (petY >= groundY) {
     petY = groundY;
     if (pendingSleep) {
