@@ -59,6 +59,9 @@ let ballAlpha = 1;
 let showBallTimeout = null;
 let fadeBallTimeout = null;
 
+// --- Action Lock ---
+let actionInProgress = false; // Used to lock/unlock buttons during action
+
 // --- Shared Ground Logic ---
 function getGroundY() {
   return canvas.height - PET_HEIGHT;
@@ -122,23 +125,31 @@ function loadBallImages() {
 
 // --- Pet Care Functions (exposed to window) ---
 window.feedPet = function() {
+  if (actionInProgress) return;
+  lockActionsForDuration(1000); // Example: Lock for 1s (customize for real feed animation)
   pet.hunger = Math.max(0, pet.hunger - 15);
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
   registerBackgroundSync('sync-feed-pet');
 };
 window.playWithPet = function() {
+  if (actionInProgress) return;
+  lockActionsForDuration(15000); // 10s visible + 5s fade for ball
   pet.happiness = Math.min(100, pet.happiness + 10);
   pet.hunger = Math.min(100, pet.hunger + 5);
   updateStats();
   showBallForDuration();
 };
 window.cleanPet = function() {
+  if (actionInProgress) return;
+  lockActionsForDuration(2000); // Example: Lock for 2s (customize as needed)
   pet.cleanliness = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 };
 window.sleepPet = function() {
+  if (actionInProgress) return;
+  lockActionsForDuration(9000); // Approx 9s for sleep sequence
   pet.health = Math.min(100, pet.health + 10);
   pet.hunger = Math.min(100, pet.hunger + 10);
   updateStats();
@@ -150,14 +161,26 @@ window.sleepPet = function() {
   }
 };
 window.healPet = function() {
+  if (actionInProgress) return;
+  lockActionsForDuration(1000); // Example: Lock for 1s
   pet.health = 100;
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
 };
 
+// --- Action Lock Helper ---
+function lockActionsForDuration(ms) {
+  if (actionInProgress) return;
+  actionInProgress = true;
+  setButtonsDisabled(true);
+  setTimeout(() => {
+    actionInProgress = false;
+    setButtonsDisabled(false);
+  }, ms);
+}
+
 // --- Ball Show/Hide Logic (now for a single random ball) ---
 function showBallForDuration() {
-  // Always reset timers and state
   clearTimeout(showBallTimeout);
   clearTimeout(fadeBallTimeout);
   showBall = true;
@@ -213,7 +236,6 @@ function runSleepSequence() {
   sleepSequenceStep = 1;
   sleepSequenceActive = true;
   sleepRequested = false;
-  setButtonsDisabled(true);
 
   let imgA = resumeImg;
   let imgB = (resumeImg === petImgRight) ? petImgLeft : petImgRight;
@@ -243,7 +265,6 @@ function runSleepSequence() {
               direction = resumeDirection;
               currentImg = (direction === 1) ? petImgRight : petImgLeft;
               startJump();
-              setButtonsDisabled(false);
             }, 2000);
           }, 5000);
         }, 500);
