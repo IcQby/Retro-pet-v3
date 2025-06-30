@@ -257,7 +257,7 @@ function runSleepSequence() {
               sleepSequenceActive = false;
               direction = resumeDirection;
               currentImg = direction === 1 ? petImgRight : petImgLeft;
-              startBounceJump();
+              startAutoJump();
             }, 2000);
           }, 5000);
         }, 500);
@@ -266,27 +266,30 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- Side-to-side bounce logic ---
-// Each jump crosses ~1/4 of the canvas in 1 second (so 4-5 bounces in 4-5s)
-function startBounceJump() {
-  // Determine target edge and direction
-  let targetX, dist, jumpDuration;
-  // Each jump: 1/4 canvas per bounce, 1s per bounce
-  jumpDuration = 1.0; // seconds
-  let bouncesPerTrip = 4; // want 4-5 bounces per trip
-  let segment = (canvas.width - PET_WIDTH) / bouncesPerTrip;
-  if (direction === 1) {
-    // going right
-    targetX = Math.min(petX + segment, canvas.width - PET_WIDTH);
-  } else {
-    // going left
-    targetX = Math.max(petX - segment, 0);
-  }
-  dist = targetX - petX;
+// --- Auto jump logic for continuous bouncing ---
+// Each jump covers 1/5 of the screen
+function startAutoJump() {
+  // Amount of screen to cover per jump (1/5th of available width)
+  const jumpFraction = 1 / 5;
+  const groundY = getGroundY();
 
-  vx = dist / (jumpDuration * 60); // 60fps
-  // Set a gentle jump height (makes arc look good for 1s jump)
-  const jumpHeight = 38; // pixels, adjust for gentle arc
+  // Pig's starting position
+  const startX = petX;
+  // Target distance per jump
+  const totalWidth = canvas.width - PET_WIDTH;
+  const dx = direction === 1
+    ? Math.min(totalWidth - startX, totalWidth * jumpFraction)
+    : -Math.min(startX, totalWidth * jumpFraction);
+
+  // Time in frames and seconds (tweak for smooth, not too fast)
+  const jumpDurationSeconds = 0.8; // Around 0.8s per jump (5 in 4s)
+  const fps = 60;
+  const frames = jumpDurationSeconds * fps;
+
+  vx = dx / frames; // pixels per frame
+
+  // Gentle vertical jump
+  const jumpHeight = 32;
   vy = -Math.sqrt(2 * gravity * jumpHeight);
 
   currentImg = direction === 1 ? petImgRight : petImgLeft;
@@ -481,35 +484,27 @@ function animate() {
       petX += vx;
       petY += vy;
 
-      // Start new jump if at the end of segment or at an edge
-      let segment = (canvas.width - PET_WIDTH) / 4;
-      if (
-        (direction === 1 && petX >= Math.min(petX + segment, canvas.width - PET_WIDTH) - 2) ||
-        (direction === -1 && petX <= Math.max(petX - segment, 0) + 2)
-      ) {
-        // Reverse direction if at edge
-        if (petX <= 0) {
-          petX = 0;
-          direction = 1;
-        } else if (petX + PET_WIDTH >= canvas.width) {
-          petX = canvas.width - PET_WIDTH;
-          direction = -1;
-        } else {
-          direction *= -1;
-        }
-        startBounceJump();
+      // Bounce off sides and start next jump
+      if (petX <= 0) {
+        petX = 0;
+        direction = 1;
+        currentImg = petImgRight;
+        startAutoJump();
+      } else if (petX + PET_WIDTH >= canvas.width) {
+        petX = canvas.width - PET_WIDTH;
+        direction = -1;
+        currentImg = petImgLeft;
+        startAutoJump();
       }
-
       // On ground, start another jump toward the current direction
       let groundY = getGroundY();
       if (petY >= groundY) {
         petY = groundY;
         vy = 0;
-        startBounceJump();
+        startAutoJump();
       }
     }
   } else {
-    // Ball play logic
     updatePigChase();
     resolvePigBallOverlap();
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
@@ -544,8 +539,8 @@ function animate() {
         pendingSleep = false;
         runSleepSequence();
       } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
-        // On ground during play, use a normal jump (not auto-jump)
-        startBounceJump();
+        // On ground during play, jump as normal (tuned for play, could be different if needed)
+        startAutoJump();
       }
     }
   }
@@ -606,7 +601,7 @@ window.addEventListener('DOMContentLoaded', () => {
       currentImg = petImgLeft;
       resumeDirection = direction;
       resumeImg = currentImg;
-      startBounceJump();
+      startAutoJump();
       animate();
     })
     .catch((err) => {
