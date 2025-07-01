@@ -62,9 +62,11 @@ let fadeBallTimeout = null;
 // --- Action Lock ---
 let actionInProgress = false; // Used to lock/unlock buttons during effect
 
-// --- Passing Ball State ---
-let passingBall = false;
-let passingDirection = 0;
+// --- Overlap Pause v8 State ---
+let wasInOverlap = false;
+let inOverlap = false;
+let overlapPauseActive = false;
+let overlapLastEndDistance = Infinity;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -289,33 +291,24 @@ function startJump() {
 
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
-  // Make it fly much faster than before
-  const baseSpeed = Math.max(Math.abs(vx), 4); // double previous min speed
-  const speed = (3 + Math.random() * 1.5) * baseSpeed; // higher base (was 1.5~2.5x)
+  const baseSpeed = Math.max(Math.abs(vx), 4);
+  const speed = (3 + Math.random() * 1.5) * baseSpeed;
   const dir = direction;
-
-  // 2x as much chance to go up at 45-60°
-  // 0-1: 2/3 chance for 45-60°, 1/3 for 0-45°
   if (Math.random() < 2/3) {
-    // Angle between 45° and 60°
-    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12); // 45° to 60°
+    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12);
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
   } else {
-    // Angle between 0° and 45°
-    const angle = Math.random() * (Math.PI / 4); // 0° to 45°
+    const angle = Math.random() * (Math.PI / 4);
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
   }
 }
 
-// --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
-// Updated for v6: Don't override vy or force ground-only movement. Let jump arc continue.
-function resolvePigBallOverlap() {
-  if (!showBall || !ball) {
-    passingBall = false;
-    return false;
-  }
+// --- Overlap detection for v8 (returns true if overlap, but does NOT affect movement) ---
+function checkPigBallOverlap() {
+  if (!showBall || !ball) return false;
+
   // Pig rectangle:
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
@@ -330,19 +323,10 @@ function resolvePigBallOverlap() {
   const dx = bx - closestX;
   const dy = by - closestY;
   const distSq = dx * dx + dy * dy;
-
-  if (distSq < r * r) {
-    // Overlap: start "passingBall" state, keep moving in current direction
-    if (!passingBall) {
-      passingBall = true;
-      passingDirection = direction;
-    }
-    return true;
-  }
-  return false;
+  return distSq < r * r;
 }
 
-// --- Pig-ball front collision detection ---
+// --- Ball-to-pig front collision detection ---
 function pigHitsBallFront(ball) {
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
@@ -361,20 +345,6 @@ function pigHitsBallFront(ball) {
     }
   }
   return false;
-}
-
-// --- Ball-to-pig normal collision (non-front, for completeness) ---
-function pigHitsBallAny(ball) {
-  const pigLeft = petX;
-  const pigRight = petX + PET_WIDTH;
-  const pigTop = petY;
-  const pigBottom = petY + PET_HEIGHT;
-  const bx = ball.x, by = ball.y, r = ball.radius;
-  const closestX = Math.max(pigLeft, Math.min(bx, pigRight));
-  const closestY = Math.max(pigTop, Math.min(by, pigBottom));
-  const dx = bx - closestX;
-  const dy = by - closestY;
-  return dx * dx + dy * dy < r * r;
 }
 
 // --- Animation/Background ---
@@ -454,35 +424,20 @@ function shouldReverseToChaseBall() {
   return false;
 }
 
-// --- Pig Chasing Ball Logic ---
+// --- Pig Chasing Ball Logic for v8 ---
 function updatePigChase() {
-  // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
   if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
-
-  // If passingBall state: continue moving in original direction until fully past ball
-  if (passingBall) {
-    direction = passingDirection;
-    // vx stays as before, just keep current direction and let jump arc continue
-
-    // Check if pig's hitbox is now fully past the ball
-    if (
-      (direction === 1 && petX > ball.x + ball.radius) ||
-      (direction === -1 && petX + PET_WIDTH < ball.x - ball.radius)
-    ) {
-      passingBall = false;
-      // Don't reverse yet; reversal is handled after landing
-    }
+  if (overlapPauseActive) {
+    // Don't chase the ball, just continue current jump arc in current direction
     return;
   }
-
   // Normal chase
   const pigCenterX = petX + PET_WIDTH / 2;
   const ballX = ball.x;
 
-  const chaseSpeed = 3; // speed of pig when chasing
+  const chaseSpeed = 3;
   const deadzone = BALL_RADIUS + 10;
   if (Math.abs(ballX - pigCenterX) > deadzone) {
-    // Go towards the ball
     if (ballX > pigCenterX) {
       direction = 1;
       vx = chaseSpeed;
@@ -499,6 +454,7 @@ function updatePigChase() {
   }
 }
 
+// --- Main Animation Loop ---
 function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
@@ -507,11 +463,47 @@ function animate() {
   updateBall();
   drawBall();
 
+  // Overlap detection for this frame
+  inOverlap = checkPigBallOverlap();
+  let pigCenterX = petX + PET_WIDTH / 2;
+  let ballCenterX = ball ? ball.x : null;
+
+  // Overlap pause logic v8
+  if (showBall && ball) {
+    // Start overlap pause when entering overlap
+    if (inOverlap && !wasInOverlap) {
+      overlapPauseActive = true;
+      overlapLastEndDistance = Infinity;
+    }
+    // While overlapping, keep pause active and reset separation
+    if (inOverlap) {
+      overlapLastEndDistance = Infinity;
+    }
+    // When overlap ends, start tracking separation distance
+    if (!inOverlap && wasInOverlap) {
+      if (ball) overlapLastEndDistance = Math.abs(pigCenterX - ballCenterX);
+    }
+    // While not overlapping, update distance and exit pause after 0.5*PET_WIDTH
+    if (overlapPauseActive && !inOverlap && ball) {
+      overlapLastEndDistance = Math.abs(pigCenterX - ballCenterX);
+      if (overlapLastEndDistance >= PET_WIDTH * 0.5) {
+        overlapPauseActive = false; // Resume chase
+      }
+    }
+    // If ball disappears, reset pause
+    if (!showBall) {
+      overlapPauseActive = false;
+      overlapLastEndDistance = Infinity;
+    }
+  } else {
+    // No ball, not chasing
+    overlapPauseActive = false;
+    overlapLastEndDistance = Infinity;
+  }
+  wasInOverlap = inOverlap;
+
   // Pig chase logic
   updatePigChase();
-
-  // Prevent pig from overlapping with the ball
-  resolvePigBallOverlap();
 
   // Pig movement (jump arc always continues)
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
@@ -541,24 +533,29 @@ function animate() {
     }
   }
 
-  // Ground landing and jump/reversal logic
+  // Ground landing and jump/reversal/chase logic
   let groundY = getGroundY();
   if (petY >= groundY) {
     petY = groundY;
 
-    // After landing, decide if we need to reverse and jump again
-    if (shouldReverseToChaseBall()) {
-      direction = -direction;
-      vx = direction * 3;
-      currentImg = (direction === 1) ? petImgRight : petImgLeft;
-      startJump();
-    } else if (pendingSleep) {
+    if (pendingSleep) {
       vx = 0;
       vy = 0;
       pendingSleep = false;
       runSleepSequence();
-    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake && !passingBall) {
-      startJump();
+    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
+      if (showBall && ball) {
+        // Normal chase: possibly reverse direction if needed
+        if (!overlapPauseActive && shouldReverseToChaseBall()) {
+          direction = -direction;
+          vx = direction * 3;
+          currentImg = (direction === 1) ? petImgRight : petImgLeft;
+        }
+        startJump();
+      } else {
+        // No ball: continue jumping in last direction
+        startJump();
+      }
     }
   }
 
@@ -570,7 +567,7 @@ function animate() {
     const statsStyle = window.getComputedStyle(stats);
     const versionDiv = document.createElement('div');
     versionDiv.id = 'version-number';
-    versionDiv.textContent = 'v6';
+    versionDiv.textContent = 'v8';
     versionDiv.style.position = 'fixed';
     versionDiv.style.right = '40px';
     versionDiv.style.bottom = '20px';
