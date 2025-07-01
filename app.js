@@ -62,6 +62,10 @@ let fadeBallTimeout = null;
 // --- Action Lock ---
 let actionInProgress = false; // Used to lock/unlock buttons during effect
 
+// --- Passing Ball State ---
+let passingBall = false;
+let passingDirection = 0;
+
 // --- Shared Ground Logic ---
 function getGroundY() {
   return canvas.height - PET_HEIGHT;
@@ -305,12 +309,7 @@ function kickBallFromPig(ball) {
   }
 }
 
-// --- Passing Ball State ---
-let passingBall = false;
-let passingDirection = 0;
-
 // --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
-// Returns true if the pig and ball overlap, and also resolves overlap by pushing pig out
 function resolvePigBallOverlap() {
   if (!showBall || !ball) {
     passingBall = false;
@@ -448,8 +447,8 @@ function updatePigChase() {
   // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
   if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
 
-  // If passingBall state: continue moving in original direction until fully past ball
   if (passingBall) {
+    // Continue moving in original direction until fully past ball
     direction = passingDirection;
     vx = direction * 3;
     currentImg = (direction === 1) ? petImgRight : petImgLeft;
@@ -512,26 +511,7 @@ function animate() {
     petY += vy;
   }
 
-  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
-    if (petX <= 0) {
-      petX = 0;
-      direction = 1;
-      vx = Math.abs(vx);
-      currentImg = petImgRight;
-    } else if (petX + PET_WIDTH >= canvas.width) {
-      petX = canvas.width - PET_WIDTH;
-      direction = -1;
-      vx = -Math.abs(vx);
-      currentImg = petImgLeft;
-    }
-  }
-
-  if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
-    if (pigHitsBallFront(ball)) {
-      kickBallFromPig(ball);
-    }
-  }
-
+  // Always jump when on ground (unless sleeping or sleep sequence)
   let groundY = getGroundY();
   if (petY >= groundY) {
     petY = groundY;
@@ -540,9 +520,14 @@ function animate() {
       vy = 0;
       pendingSleep = false;
       runSleepSequence();
-    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake && !passingBall) {
-      // Only jump if NOT passing the ball
+    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
       startJump();
+    }
+  }
+
+  if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
+    if (pigHitsBallFront(ball)) {
+      kickBallFromPig(ball);
     }
   }
 
