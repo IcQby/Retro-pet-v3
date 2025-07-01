@@ -66,10 +66,11 @@ let actionInProgress = false; // Used to lock/unlock buttons during effect
 let passingBall = false;
 let passingDirection = 0;
 
-// --- Sliding State ---
+// --- Slide State ---
 let sliding = false;
-let slideVx = 0;
-let slideFriction = 0.92; // lower = longer slide
+let slideStartX = 0;
+let slideDistance = 0;
+let slideDir = 0;
 
 // --- Shared Ground Logic ---
 function getGroundY() {
@@ -294,16 +295,15 @@ function startJump() {
 
 // --- Kick a ball with an arc when the pig hits its front! ---
 function kickBallFromPig(ball) {
-  const baseSpeed = Math.max(Math.abs(vx), 4); // double previous min speed
-  const speed = (3 + Math.random() * 1.5) * baseSpeed; // higher base (was 1.5~2.5x)
+  const baseSpeed = Math.max(Math.abs(vx), 4);
+  const speed = (3 + Math.random() * 1.5) * baseSpeed;
   const dir = direction;
-
   if (Math.random() < 2/3) {
-    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12); // 45° to 60°
+    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 12);
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
   } else {
-    const angle = Math.random() * (Math.PI / 4); // 0° to 45°
+    const angle = Math.random() * (Math.PI / 4);
     ball.vx = dir * speed * Math.cos(angle);
     ball.vy = -speed * Math.sin(angle);
   }
@@ -444,15 +444,17 @@ function drawBall() {
 function updatePigChase() {
   if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
 
-  // If sliding, continue sliding until velocity is low
+  // If sliding, move in slideDir until 1 pig width passed, then turn and chase
   if (sliding) {
-    vx = slideVx;
-    currentImg = (vx >= 0) ? petImgRight : petImgLeft;
-    slideVx *= slideFriction;
-    // If velocity is low, stop sliding
-    if (Math.abs(slideVx) < 0.5) {
+    vx = slideDir * 6;
+    currentImg = (slideDir === 1) ? petImgRight : petImgLeft;
+    slideDistance = Math.abs(petX - slideStartX);
+    if (slideDistance >= PET_WIDTH) {
+      // Slide done, turn and chase
       sliding = false;
-      vx = 0;
+      direction = -slideDir;
+      vx = direction * 3;
+      currentImg = (direction === 1) ? petImgRight : petImgLeft;
     }
     return;
   }
@@ -466,11 +468,10 @@ function updatePigChase() {
       (direction === -1 && petX + PET_WIDTH < ball.x - ball.radius)
     ) {
       passingBall = false;
-      // Enable sliding only when chasing (not during passingBall)
+      // When passing is done, start sliding for 1 pig width before reversing
       sliding = true;
-      slideVx = -direction * 5; // Slide in reverse direction after passing ball
-      direction = -direction;
-      currentImg = (direction === 1) ? petImgRight : petImgLeft;
+      slideStartX = petX;
+      slideDir = direction;
     }
     return;
   }
@@ -497,7 +498,6 @@ function updatePigChase() {
   }
 }
 
-// --- Animate Loop ---
 function animate() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
