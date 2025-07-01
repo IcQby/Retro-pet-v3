@@ -142,7 +142,6 @@ window.feedPet = effectGuard(function () {
   pet.hunger = Math.max(0, pet.hunger - 15);
   pet.happiness = Math.min(100, pet.happiness + 5);
   updateStats();
-  registerBackgroundSync('sync-feed-pet');
 });
 window.playWithPet = effectGuard(function () {
   lockActionsForDuration(15000);
@@ -286,7 +285,7 @@ function startAutoJump() {
   const fps = 60;
   const frames = jumpDurationSeconds * fps;
 
-  // --- Robust wall bounce: if at edge, move slightly away before jump ---
+  // Robust wall bounce: if at edge, move slightly away before jump
   let offset = 6;
   if (petX <= 0) {
     petX = 0 + offset;
@@ -509,7 +508,7 @@ function animate() {
     petY = getGroundY();
     if (Date.now() >= ballGonePauseUntil) {
       justPausedAfterBall = false;
-      // --- Robust wall bounce: ensure not at wall after pause ---
+      // Robust wall bounce: ensure not at wall after pause
       const totalWidth = canvas.width - PET_WIDTH;
       let offset = 6;
       if (petX <= 0) {
@@ -526,7 +525,7 @@ function animate() {
     return;
   }
 
-  // If not chasing a ball, the pig bounces continuously
+  // --- IDLE: use pure v20 bouncing ---
   if (!showBall || !ball) {
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
       vy += gravity;
@@ -540,7 +539,7 @@ function animate() {
         petY = groundY;
         vy = 0;
 
-        // --- Robust wall bounce: if at edge, move a bit away and bounce ---
+        // Robust wall bounce: if at edge, move a bit away and bounce
         let offset = 6;
         if (petX <= 0) {
           petX = 0 + offset;
@@ -556,6 +555,7 @@ function animate() {
       }
     }
   } else {
+    // --- CHASE: use advanced chase logic ---
     updatePigChase();
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
       vy += gravity;
@@ -599,41 +599,6 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-// --- Background Sync helper ---
-function registerBackgroundSync(tag) {
-  if ('serviceWorker' in navigator && 'SyncManager' in window) {
-    navigator.serviceWorker.ready.then(registration => {
-      registration.sync.register(tag).catch(() => {});
-    });
-  }
-}
-
-// --- Service Worker hot update logic ---
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js').then(registration => {
-    if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    registration.addEventListener('updatefound', () => {
-      const newWorker = registration.installing;
-      if (newWorker) {
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed') {
-            if (navigator.serviceWorker.controller && !window.__reloading__) {
-              window.__reloading__ = true;
-              window.location.reload();
-            }
-          }
-        });
-      }
-    });
-  });
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!window.__reloading__) {
-      window.__reloading__ = true;
-      window.location.reload();
-    }
-  });
-}
-
 // --- Startup: Only launch once ---
 window.addEventListener('DOMContentLoaded', () => {
   if (window.__pet_loaded__) return;
@@ -650,6 +615,18 @@ window.addEventListener('DOMContentLoaded', () => {
       currentImg = petImgLeft;
       resumeDirection = direction;
       resumeImg = currentImg;
+
+      // Ensure pig starts away from wall and with correct direction
+      const totalWidth = canvas.width - PET_WIDTH;
+      let offset = 6;
+      if (petX <= 0) {
+        petX = 0 + offset;
+        direction = 1;
+      } else if (petX >= totalWidth) {
+        petX = totalWidth - offset;
+        direction = -1;
+      }
+
       startAutoJump();
       animate();
     })
