@@ -24,7 +24,7 @@ const PET_WIDTH = 102, PET_HEIGHT = 102;
 
 // --- Pet Animation State ---
 let petX, petY;
-let vx = 0, vy = 0, gravity = 0.4;
+let vx = 3, vy = 0, gravity = 0.4;
 let direction = -1; // -1=left, 1=right
 let isSleeping = false;
 let sleepSequenceActive = false;
@@ -166,7 +166,6 @@ window.sleepPet = effectGuard(function () {
     resumeDirection = direction;
     resumeImg = (direction === 1) ? petImgRight : petImgLeft;
     pendingSleep = true;
-    // If pig is on ground, start sequence right away:
     if (petY === getGroundY()) {
       vx = 0; vy = 0; pendingSleep = false; runSleepSequence();
     }
@@ -272,6 +271,7 @@ function runSleepSequence() {
               sleepSequenceActive = false;
               direction = resumeDirection;
               currentImg = direction === 1 ? petImgRight : petImgLeft;
+              vx = 3 * direction;
             }, 2000);
           }, 5000);
         }, 500);
@@ -280,31 +280,7 @@ function runSleepSequence() {
   }, 1000);
 }
 
-// --- v20 jump logic for idle movement ---
-function startAutoJump() {
-  const totalWidth = canvas.width - PET_WIDTH;
-  const jumpCount = 5;
-  const jumpDistance = totalWidth / jumpCount;
-  const jumpDurationSeconds = 0.8;
-  const fps = 60;
-  const frames = jumpDurationSeconds * fps;
-
-  let targetX;
-  if (direction === 1) {
-    targetX = Math.min(petX + jumpDistance, totalWidth);
-  } else {
-    targetX = Math.max(petX - jumpDistance, 0);
-  }
-  const dx = targetX - petX;
-
-  vx = dx / frames;
-  const jumpHeight = 32;
-  vy = -Math.sqrt(2 * gravity * jumpHeight);
-
-  currentImg = direction === 1 ? petImgRight : petImgLeft;
-}
-
-// --- Pig-ball overlap avoidance ---
+// --- Ball Overlap Avoidance ---
 function isPigOverlappingBall() {
   if (!showBall || !ball) return false;
   const pigLeft = petX;
@@ -441,7 +417,7 @@ function updatePigChase() {
   if (pigAvoidingBall) {
     if (petY === getGroundY()) {
       direction = pigAvoidBallDirection;
-      startAutoJump();
+      vx = 3 * direction;
     }
     if (!isPigOverlappingBall()) {
       pigAvoidingBall = false;
@@ -457,7 +433,7 @@ function updatePigChase() {
     }
     direction = pigAvoidBallDirection;
     if (petY === getGroundY()) {
-      startAutoJump();
+      vx = 3 * direction;
     }
     return;
   }
@@ -465,7 +441,7 @@ function updatePigChase() {
   const pigCenterX = petX + PET_WIDTH / 2;
   const ballX = ball.x;
 
-  const chaseSpeed = 3 * 0.4;
+  const chaseSpeed = 1.2;
   const deadzone = BALL_RADIUS + 10;
   if (Math.abs(ballX - pigCenterX) > deadzone) {
     if (ballX > pigCenterX) {
@@ -499,26 +475,15 @@ function animate() {
     petY = getGroundY();
     if (Date.now() >= ballGonePauseUntil) {
       justPausedAfterBall = false;
-      // Robust wall bounce: ensure not at wall after pause
-      const totalWidth = canvas.width - PET_WIDTH;
-      if (petX <= 0) {
-        petX = 0;
-        direction = 1;
-        startAutoJump();
-      } else if (petX >= totalWidth) {
-        petX = totalWidth;
-        direction = -1;
-        startAutoJump();
-      } else {
-        startAutoJump();
-      }
+      // Resume normal movement after pause
+      vx = 3 * direction;
     }
     ctx.drawImage(currentImg, petX, petY, PET_WIDTH, PET_HEIGHT);
     requestAnimationFrame(animate);
     return;
   }
 
-  // --- IDLE: pig bounces left/right ---
+  // --- IDLE: simple bouncing left/right movement ---
   if (!showBall || !ball) {
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
       vy += gravity;
@@ -535,15 +500,12 @@ function animate() {
         if (petX <= 0) {
           petX = 0;
           direction = 1;
-          startAutoJump();
+          vx = 3 * direction;
         } else if (petX >= totalWidth) {
           petX = totalWidth;
           direction = -1;
-          startAutoJump();
-        } else {
-          startAutoJump();
+          vx = 3 * direction;
         }
-
         // Sleep should start immediately if pending
         if (pendingSleep) {
           vx = 0;
@@ -566,11 +528,11 @@ function animate() {
       if (petX <= 0) {
         petX = 0;
         direction = 1;
-        startAutoJump();
+        vx = 1.2 * direction;
       } else if (petX + PET_WIDTH >= canvas.width) {
         petX = canvas.width - PET_WIDTH;
         direction = -1;
-        startAutoJump();
+        vx = 1.2 * direction;
       }
     }
     if (!isSleeping && !sleepSequenceActive && !pendingWake && showBall && ball) {
@@ -586,8 +548,6 @@ function animate() {
         vy = 0;
         pendingSleep = false;
         runSleepSequence();
-      } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
-        startAutoJump();
       }
     }
   }
@@ -613,18 +573,7 @@ window.addEventListener('DOMContentLoaded', () => {
       currentImg = petImgLeft;
       resumeDirection = direction;
       resumeImg = currentImg;
-
-      // Ensure pig starts away from wall and with correct direction
-      const totalWidth = canvas.width - PET_WIDTH;
-      if (petX <= 0) {
-        petX = 0;
-        direction = 1;
-      } else if (petX >= totalWidth) {
-        petX = totalWidth;
-        direction = -1;
-      }
-
-      startAutoJump();
+      vx = 3 * direction;
       animate();
     })
     .catch((err) => {
