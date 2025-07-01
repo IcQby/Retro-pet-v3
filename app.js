@@ -305,10 +305,17 @@ function kickBallFromPig(ball) {
   }
 }
 
+// --- Passing Ball State ---
+let passingBall = false;
+let passingDirection = 0;
+
 // --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
 // Returns true if the pig and ball overlap, and also resolves overlap by pushing pig out
 function resolvePigBallOverlap() {
-  if (!showBall || !ball) return false;
+  if (!showBall || !ball) {
+    passingBall = false;
+    return false;
+  }
   // Pig rectangle:
   const pigLeft = petX;
   const pigRight = petX + PET_WIDTH;
@@ -325,22 +332,10 @@ function resolvePigBallOverlap() {
   const distSq = dx * dx + dy * dy;
 
   if (distSq < r * r) {
-    // Overlap: push the pig out along the minimal axis
-    const dist = Math.sqrt(distSq) || 0.01;
-    const overlap = r - dist;
-    // Direction to push pig: from ball to pig
-    const pushX = dx / dist;
-    const pushY = dy / dist;
-    // Move pig minimally on x/y axis to resolve overlap
-    // Only move in x direction (since pig walks horizontally)
-    if (Math.abs(pushX) > Math.abs(pushY)) {
-      petX += (pushX * overlap);
-      // Clamp to canvas
-      petX = Math.max(0, Math.min(petX, canvas.width - PET_WIDTH));
-    } else {
-      petY += (pushY * overlap);
-      // Clamp to ground
-      petY = Math.max(0, Math.min(petY, getGroundY()));
+    // Overlap: start "passingBall" state, keep moving in current direction
+    if (!passingBall) {
+      passingBall = true;
+      passingDirection = direction;
     }
     return true;
   }
@@ -453,13 +448,29 @@ function updatePigChase() {
   // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
   if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
 
-  // Consider the center of the pig horizontally
+  // If passingBall state: continue moving in original direction until fully past ball
+  if (passingBall) {
+    direction = passingDirection;
+    vx = direction * 3;
+    currentImg = (direction === 1) ? petImgRight : petImgLeft;
+    // Check if pig's hitbox is now fully past the ball
+    if (
+      (direction === 1 && petX > ball.x + ball.radius) ||
+      (direction === -1 && petX + PET_WIDTH < ball.x - ball.radius)
+    ) {
+      passingBall = false;
+      // Turn around to chase again
+      direction = -direction;
+      vx = direction * 3;
+      currentImg = (direction === 1) ? petImgRight : petImgLeft;
+    }
+    return;
+  }
+
+  // Normal chase
   const pigCenterX = petX + PET_WIDTH / 2;
-  // Ball's x
   const ballX = ball.x;
 
-  // Pig chases ball if not touching it
-  // (give a small deadzone so pig doesn't jitter at the ball)
   const chaseSpeed = 3; // speed of pig when chasing
   const deadzone = BALL_RADIUS + 10;
   if (Math.abs(ballX - pigCenterX) > deadzone) {
@@ -529,7 +540,8 @@ function animate() {
       vy = 0;
       pendingSleep = false;
       runSleepSequence();
-    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
+    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake && !passingBall) {
+      // Only jump if NOT passing the ball
       startJump();
     }
   }
