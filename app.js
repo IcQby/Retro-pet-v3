@@ -62,6 +62,10 @@ let fadeBallTimeout = null;
 // --- Action Lock ---
 let actionInProgress = false; // Used to lock/unlock buttons during effect
 
+// --- Passing Ball State ---
+let passingBall = false;
+let passingDirection = 0;
+
 // --- Shared Ground Logic ---
 function getGroundY() {
   return canvas.height - PET_HEIGHT;
@@ -305,11 +309,8 @@ function kickBallFromPig(ball) {
   }
 }
 
-// --- Passing Ball State ---
-let passingBall = false;
-let passingDirection = 0;
-
 // --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
+// Updated for v6: Don't override vy or force ground-only movement. Let jump arc continue.
 function resolvePigBallOverlap() {
   if (!showBall || !ball) {
     passingBall = false;
@@ -442,6 +443,17 @@ function drawBall() {
   ctx.restore();
 }
 
+// --- Helper: should pig reverse after landing? ---
+function shouldReverseToChaseBall() {
+  if (!showBall || !ball) return false;
+  const pigCenterX = petX + PET_WIDTH / 2;
+  if ((direction === 1 && pigCenterX > ball.x) ||
+      (direction === -1 && pigCenterX < ball.x)) {
+    return true;
+  }
+  return false;
+}
+
 // --- Pig Chasing Ball Logic ---
 function updatePigChase() {
   // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
@@ -450,18 +462,15 @@ function updatePigChase() {
   // If passingBall state: continue moving in original direction until fully past ball
   if (passingBall) {
     direction = passingDirection;
-    vx = direction * 3;
-    currentImg = (direction === 1) ? petImgRight : petImgLeft;
+    // vx stays as before, just keep current direction and let jump arc continue
+
     // Check if pig's hitbox is now fully past the ball
     if (
       (direction === 1 && petX > ball.x + ball.radius) ||
       (direction === -1 && petX + PET_WIDTH < ball.x - ball.radius)
     ) {
       passingBall = false;
-      // Turn around to chase again
-      direction = -direction;
-      vx = direction * 3;
-      currentImg = (direction === 1) ? petImgRight : petImgLeft;
+      // Don't reverse yet; reversal is handled after landing
     }
     return;
   }
@@ -485,7 +494,6 @@ function updatePigChase() {
     }
   } else {
     vx = 0; // reached ball
-    // Keep facing the ball
     if (direction === 1) currentImg = petImgRight;
     else currentImg = petImgLeft;
   }
@@ -505,12 +513,14 @@ function animate() {
   // Prevent pig from overlapping with the ball
   resolvePigBallOverlap();
 
+  // Pig movement (jump arc always continues)
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     vy += gravity;
     petX += vx;
     petY += vy;
   }
 
+  // Boundaries
   if (!isSleeping && !sleepSequenceActive && !pendingWake) {
     if (petX <= 0) {
       petX = 0;
@@ -531,16 +541,23 @@ function animate() {
     }
   }
 
+  // Ground landing and jump/reversal logic
   let groundY = getGroundY();
   if (petY >= groundY) {
     petY = groundY;
-    if (pendingSleep) {
+
+    // After landing, decide if we need to reverse and jump again
+    if (shouldReverseToChaseBall()) {
+      direction = -direction;
+      vx = direction * 3;
+      currentImg = (direction === 1) ? petImgRight : petImgLeft;
+      startJump();
+    } else if (pendingSleep) {
       vx = 0;
       vy = 0;
       pendingSleep = false;
       runSleepSequence();
     } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake && !passingBall) {
-      // Only jump if NOT passing the ball
       startJump();
     }
   }
@@ -548,13 +565,12 @@ function animate() {
   ctx.drawImage(currentImg, petX, petY, PET_WIDTH, PET_HEIGHT);
 
   // --- Version text (bottom right, outside canvas) ---
-  // Only change: add this to display "v2" in same style as stats
   if (!document.getElementById('version-number')) {
     const stats = document.getElementById('stats');
     const statsStyle = window.getComputedStyle(stats);
     const versionDiv = document.createElement('div');
     versionDiv.id = 'version-number';
-    versionDiv.textContent = 'v2';
+    versionDiv.textContent = 'v6';
     versionDiv.style.position = 'fixed';
     versionDiv.style.right = '40px';
     versionDiv.style.bottom = '20px';
