@@ -39,7 +39,7 @@ let wakeTimeoutId = null;
 
 // --- Pig Ball Avoidance State ---
 let pigAvoidingBall = false;
-let pigAvoidBallDirection = 0; // -1 or 1, set when avoidance starts
+let pigAvoidBallDirection = 0;
 
 // --- Stats Logic ---
 let pet = {
@@ -227,7 +227,6 @@ function showBallForDuration() {
         ballAlpha = 1;
         ball = null;
         pigAvoidingBall = false;
-        // --- Ball pause logic: start pause when ball is fully gone
         justPausedAfterBall = true;
         ballGonePauseUntil = Date.now() + 2000;
       }
@@ -286,6 +285,14 @@ function startAutoJump() {
   const jumpDurationSeconds = 0.8;
   const fps = 60;
   const frames = jumpDurationSeconds * fps;
+
+  // --- Robust wall bounce: if at edge, move slightly away before jump ---
+  let offset = 6;
+  if (petX <= 0) {
+    petX = 0 + offset;
+  } else if (petX >= totalWidth) {
+    petX = totalWidth - offset;
+  }
 
   if (petX < 0) petX = 0;
   if (petX > totalWidth) petX = totalWidth;
@@ -502,6 +509,16 @@ function animate() {
     petY = getGroundY();
     if (Date.now() >= ballGonePauseUntil) {
       justPausedAfterBall = false;
+      // --- Robust wall bounce: ensure not at wall after pause ---
+      const totalWidth = canvas.width - PET_WIDTH;
+      let offset = 6;
+      if (petX <= 0) {
+        petX = 0 + offset;
+        direction = 1;
+      } else if (petX >= totalWidth) {
+        petX = totalWidth - offset;
+        direction = -1;
+      }
       startAutoJump();
     }
     ctx.drawImage(currentImg, petX, petY, PET_WIDTH, PET_HEIGHT);
@@ -523,13 +540,14 @@ function animate() {
         petY = groundY;
         vy = 0;
 
-        // --- Immediate bounce at walls, no slowdown ---
+        // --- Robust wall bounce: if at edge, move a bit away and bounce ---
+        let offset = 6;
         if (petX <= 0) {
-          petX = 0;
+          petX = 0 + offset;
           direction = 1;
           startAutoJump();
         } else if (petX >= totalWidth) {
-          petX = totalWidth;
+          petX = totalWidth - offset;
           direction = -1;
           startAutoJump();
         } else {
