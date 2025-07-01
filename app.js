@@ -281,6 +281,7 @@ function startAutoJump() {
   const totalWidth = canvas.width - PET_WIDTH;
   const jumpCount = 5;
   const jumpDistance = totalWidth / jumpCount;
+  const minJump = 30; // minimum jump distance for robust wall bounce
   const jumpDurationSeconds = 0.8;
   const fps = 60;
   const frames = jumpDurationSeconds * fps;
@@ -304,7 +305,14 @@ function startAutoJump() {
     targetX = petX - jumpDistance;
     if (targetX < 0) targetX = 0;
   }
-  const dx = targetX - petX;
+  let dx = targetX - petX;
+
+  // Enforce a minimum jump distance if too close to wall
+  if (Math.abs(dx) < minJump) {
+    dx = direction * minJump;
+    targetX = Math.max(0, Math.min(totalWidth, petX + dx));
+    dx = targetX - petX;
+  }
 
   vx = dx / frames;
   const jumpHeight = 32;
@@ -518,7 +526,11 @@ function animate() {
         petX = totalWidth - offset;
         direction = -1;
       }
-      startAutoJump();
+      // Force a strong jump away from wall
+      const minJump = 30;
+      vx = direction * (minJump / 48);
+      vy = -Math.sqrt(2 * gravity * 32);
+      currentImg = direction === 1 ? petImgRight : petImgLeft;
     }
     ctx.drawImage(currentImg, petX, petY, PET_WIDTH, PET_HEIGHT);
     requestAnimationFrame(animate);
@@ -541,14 +553,24 @@ function animate() {
 
         // Robust wall bounce: if at edge, move a bit away and bounce
         let offset = 6;
+        let bounced = false;
         if (petX <= 0) {
           petX = 0 + offset;
           direction = 1;
-          startAutoJump();
+          bounced = true;
         } else if (petX >= totalWidth) {
           petX = totalWidth - offset;
           direction = -1;
-          startAutoJump();
+          bounced = true;
+        }
+
+        // Always call startAutoJump, but if we bounced, force a "strong" jump
+        if (bounced) {
+          // Force a minimum jump distance away from wall
+          const minJump = 30;
+          vx = direction * (minJump / 48);
+          vy = -Math.sqrt(2 * gravity * 32);
+          currentImg = direction === 1 ? petImgRight : petImgLeft;
         } else {
           startAutoJump();
         }
@@ -563,15 +585,16 @@ function animate() {
       petY += vy;
     }
     if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+      const totalWidth = canvas.width - PET_WIDTH;
       if (petX <= 0) {
         petX = 0;
         direction = 1;
-        vx = Math.abs(vx);
+        vx = Math.abs(vx) || 1;
         currentImg = petImgRight;
       } else if (petX + PET_WIDTH >= canvas.width) {
         petX = canvas.width - PET_WIDTH;
         direction = -1;
-        vx = -Math.abs(vx);
+        vx = -Math.abs(vx) || -1;
         currentImg = petImgLeft;
       }
     }
