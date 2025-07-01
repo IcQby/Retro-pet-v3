@@ -62,10 +62,6 @@ let fadeBallTimeout = null;
 // --- Action Lock ---
 let actionInProgress = false; // Used to lock/unlock buttons during effect
 
-// --- Passing Ball State ---
-let passingBall = false;
-let passingDirection = 0;
-
 // --- Shared Ground Logic ---
 function getGroundY() {
   return canvas.height - PET_HEIGHT;
@@ -309,6 +305,10 @@ function kickBallFromPig(ball) {
   }
 }
 
+// --- Passing Ball State ---
+let passingBall = false;
+let passingDirection = 0;
+
 // --- Prevent pig and ball from overlapping: pig and ball are rectangles/circles, keep outside ---
 function resolvePigBallOverlap() {
   if (!showBall || !ball) {
@@ -447,8 +447,8 @@ function updatePigChase() {
   // Don't chase if sleeping or in sleep sequence or no ball or ball not shown
   if (isSleeping || sleepSequenceActive || pendingWake || !showBall || !ball) return;
 
+  // If passingBall state: continue moving in original direction until fully past ball
   if (passingBall) {
-    // Continue moving in original direction until fully past ball
     direction = passingDirection;
     vx = direction * 3;
     currentImg = (direction === 1) ? petImgRight : petImgLeft;
@@ -511,17 +511,17 @@ function animate() {
     petY += vy;
   }
 
-  // Always jump when on ground (unless sleeping or sleep sequence)
-  let groundY = getGroundY();
-  if (petY >= groundY) {
-    petY = groundY;
-    if (pendingSleep) {
-      vx = 0;
-      vy = 0;
-      pendingSleep = false;
-      runSleepSequence();
-    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake) {
-      startJump();
+  if (!isSleeping && !sleepSequenceActive && !pendingWake) {
+    if (petX <= 0) {
+      petX = 0;
+      direction = 1;
+      vx = Math.abs(vx);
+      currentImg = petImgRight;
+    } else if (petX + PET_WIDTH >= canvas.width) {
+      petX = canvas.width - PET_WIDTH;
+      direction = -1;
+      vx = -Math.abs(vx);
+      currentImg = petImgLeft;
     }
   }
 
@@ -531,7 +531,41 @@ function animate() {
     }
   }
 
+  let groundY = getGroundY();
+  if (petY >= groundY) {
+    petY = groundY;
+    if (pendingSleep) {
+      vx = 0;
+      vy = 0;
+      pendingSleep = false;
+      runSleepSequence();
+    } else if (!isSleeping && !sleepSequenceActive && !sleepRequested && !pendingWake && !passingBall) {
+      // Only jump if NOT passing the ball
+      startJump();
+    }
+  }
+
   ctx.drawImage(currentImg, petX, petY, PET_WIDTH, PET_HEIGHT);
+
+  // --- Version text (bottom right, outside canvas) ---
+  // Only change: add this to display "v2" in same style as stats
+  if (!document.getElementById('version-number')) {
+    const stats = document.getElementById('stats');
+    const statsStyle = window.getComputedStyle(stats);
+    const versionDiv = document.createElement('div');
+    versionDiv.id = 'version-number';
+    versionDiv.textContent = 'v2';
+    versionDiv.style.position = 'fixed';
+    versionDiv.style.right = '40px';
+    versionDiv.style.bottom = '20px';
+    versionDiv.style.fontSize = statsStyle.fontSize;
+    versionDiv.style.color = statsStyle.color;
+    versionDiv.style.fontFamily = statsStyle.fontFamily;
+    versionDiv.style.zIndex = '20';
+    versionDiv.style.pointerEvents = 'none';
+    versionDiv.style.userSelect = 'none';
+    document.body.appendChild(versionDiv);
+  }
 
   requestAnimationFrame(animate);
 }
